@@ -1,0 +1,10 @@
+{
+  "name": "siga",
+  "version": "1.0.0",
+  "description": "SIGA — Sistema Integrado de Gestão Aceitar",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
