@@ -1509,7 +1509,7 @@ function renderInspect() {
   let rows = applyFilters(
     state.data.inspect,
     state.filters.inspect,
-    ['cliente','email','telefone','localizacao','tipo_servico']
+    ['id_referencia','cliente','email','telefone','localizacao','tipo_servico']
   );
   rows = sortRows(rows, key, dir);
 
@@ -1518,6 +1518,7 @@ function renderInspect() {
   ).join('');
 
   const cols = [
+    { key: 'id_referencia', label: 'ID' },
     { key: 'cliente', label: 'Cliente' },
     { key: 'localizacao', label: 'Local' },
     { key: 'tipo_servico', label: 'Tipo Serviço' },
@@ -1568,6 +1569,7 @@ function renderInspect() {
               ? `<tr class="empty-row"><td colspan="${cols.length+1}">Sem registos</td></tr>`
               : rows.map(r => `
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
+                  <td>${escapeHtml(r.id_referencia)}</td>
                   <td><strong>${escapeHtml(r.cliente)}</strong></td>
                   <td>${escapeHtml(r.localizacao)}</td>
                   <td>${escapeHtml(r.tipo_servico)}</td>
@@ -1605,6 +1607,10 @@ function openInspectModal(id) {
     </div>
     <div class="modal-body">
       <form id="form-inspect" onsubmit="return false">
+        <div class="form-group">
+          <label>ID</label>
+          <input class="form-control" name="id_referencia" value="${escapeHtml(r.id_referencia)}" placeholder="Ex: AI-2026-001">
+        </div>
         <div class="form-group">
           <label>Cliente <span class="required">*</span></label>
           <input class="form-control" name="cliente" value="${escapeHtml(r.cliente)}" required>
@@ -1663,6 +1669,16 @@ function openInspectModal(id) {
           <label>Notas</label>
           <textarea class="form-control" name="notas">${escapeHtml(r.notas)}</textarea>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data de Envio</label>
+            <input type="date" class="form-control" name="data_envio" value="${r.data_envio ?? ''}">
+          </div>
+          <div class="form-group">
+            <label>Data de Adjudicação</label>
+            <input type="date" class="form-control" name="data_adjudicacao" value="${r.data_adjudicacao ?? ''}">
+          </div>
+        </div>
       </form>
     </div>
     <div class="modal-footer">
@@ -1718,8 +1734,9 @@ function openInspectDetail(id) {
     </div>
     <div class="modal-body">
       <div class="form-row mb-lg">
+        <div><label class="text-small text-muted">ID</label><div>${escapeHtml(r.id_referencia)}</div></div>
         <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
-        <div><label class="text-small text-muted">Data</label><div>${fmtDate(r.data_proposta)}</div></div>
+        <div><label class="text-small text-muted">Data da Proposta</label><div>${fmtDate(r.data_proposta)}</div></div>
         <div><label class="text-small text-muted">Email</label><div>${escapeHtml(r.email)}</div></div>
         <div><label class="text-small text-muted">Telefone</label><div>${escapeHtml(r.telefone)}</div></div>
         <div><label class="text-small text-muted">Localização</label><div>${escapeHtml(r.localizacao)}</div></div>
@@ -1727,6 +1744,8 @@ function openInspectDetail(id) {
         <div><label class="text-small text-muted">Tipo Serviço</label><div>${escapeHtml(r.tipo_servico)}</div></div>
         <div><label class="text-small text-muted">Valor s/ IVA</label><div>${fmtCurrency(r.valor_sem_iva)}</div></div>
         <div><label class="text-small text-muted">Canal</label><div>${escapeHtml(r.canal_origem)}</div></div>
+        <div><label class="text-small text-muted">Data de Envio</label><div>${fmtDate(r.data_envio)}</div></div>
+        <div><label class="text-small text-muted">Data de Adjudicação</label><div>${fmtDate(r.data_adjudicacao)}</div></div>
       </div>
       ${r.notas ? `<div class="mb-lg"><label class="text-small text-muted">Notas</label><div style="white-space:pre-wrap;padding-top:4px;">${escapeHtml(r.notas)}</div></div>` : ''}
 
@@ -1772,8 +1791,9 @@ async function runAnalysisInspect(id) {
 
 function exportInspect() {
   const rows = applyFilters(state.data.inspect, state.filters.inspect,
-    ['cliente','email','telefone','localizacao','tipo_servico']);
+    ['id_referencia','cliente','email','telefone','localizacao','tipo_servico']);
   exportXLSX(rows, [
+    { key: 'id_referencia', label: 'ID' },
     { key: 'cliente', label: 'Cliente' },
     { key: 'email', label: 'Email' },
     { key: 'telefone', label: 'Telefone' },
@@ -1784,25 +1804,35 @@ function exportInspect() {
     { key: 'valor_sem_iva', label: 'Valor s/ IVA (€)' },
     { key: 'estado', label: 'Estado' },
     { key: 'canal_origem', label: 'Canal de Origem' },
-    { key: 'notas', label: 'Notas' }
+    { key: 'notas', label: 'Notas' },
+    { key: 'data_envio', label: 'Data de Envio', format: fmtDate },
+    { key: 'data_adjudicacao', label: 'Data de Adjudicação', format: fmtDate }
   ], 'siga_inspect_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
 async function importInspect() {
+  const parseDate = v => {
+    if (!v) return null;
+    if (v instanceof Date) return v.toISOString().slice(0,10);
+    return v;
+  };
   const ok = await importXLSX('inspect_propostas', row => {
     if (!row['Cliente']) return null;
     return {
+      id_referencia: row['ID'] || null,
       cliente: row['Cliente'],
       email: row['Email'] || null,
       telefone: row['Telefone'] || null,
       localizacao: row['Localização'] || row['Localizacao'] || null,
       morada_completa: row['Morada Completa'] || null,
-      data_proposta: row['Data da Proposta'] ? (row['Data da Proposta'] instanceof Date ? row['Data da Proposta'].toISOString().slice(0,10) : row['Data da Proposta']) : new Date().toISOString().slice(0,10),
+      data_proposta: parseDate(row['Data da Proposta']) || new Date().toISOString().slice(0,10),
       tipo_servico: row['Tipo de Serviço'] || row['Tipo de Servico'] || null,
       valor_sem_iva: row['Valor s/ IVA (€)'] || row['Valor s/ IVA'] ? parseFloat(row['Valor s/ IVA (€)'] || row['Valor s/ IVA']) : null,
       estado: CONFIG.INSPECT_ESTADOS.includes(row['Estado']) ? row['Estado'] : 'Pendente',
       canal_origem: row['Canal de Origem'] || null,
-      notas: row['Notas'] || null
+      notas: row['Notas'] || null,
+      data_envio: parseDate(row['Data de Envio']),
+      data_adjudicacao: parseDate(row['Data de Adjudicação'] || row['Data de Adjudicacao'])
     };
   });
   if (ok) { await reloadTable('inspect'); renderInspect(); }
