@@ -8,6 +8,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <style>
     :root {
       --navy: #1a3a5c;
@@ -619,6 +624,57 @@
       margin-bottom: 16px;
     }
 
+    /* Tabs */
+    .tabs {
+      display: inline-flex;
+      background: var(--bg-muted);
+      border-radius: var(--radius);
+      padding: 3px;
+      gap: 2px;
+    }
+    .tab-btn {
+      padding: 7px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: calc(var(--radius) - 2px);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--navy);
+      color: white;
+    }
+
+    /* Chart grid */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) {
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+    .chart-grid .card-body { height: 300px; position: relative; }
+    .chart-grid canvas { max-height: 260px !important; }
+
+    /* Map */
+    #mapa-inspect {
+      height: 480px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-light);
+      overflow: hidden;
+    }
+    .leaflet-popup-content {
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .leaflet-popup-content strong { color: var(--navy); }
+
     /* Mobile nav */
     @media (max-width: 900px) {
       .navbar-inner { flex-wrap: wrap; gap: 8px; min-height: auto; padding: 10px 16px; }
@@ -746,6 +802,7 @@ const state = {
   user: null,
   userRole: null,
   currentSection: 'dashboard',
+  inspectView: 'listagem',
   data: {
     concursos: [],
     inspect: [],
@@ -754,6 +811,8 @@ const state = {
     equipamentos: [],
     comunicacoes: []
   },
+  charts: {},
+  map: null,
   sort: {
     concursos: { key: 'entrega', dir: 'asc' },
     inspect:   { key: 'data_proposta', dir: 'desc' }
@@ -1504,6 +1563,11 @@ async function importConcursos() {
 // ACEITAR INSPECT
 // ============================================================
 function renderInspect() {
+  if (state.inspectView === 'analise') {
+    renderInspectAnalise();
+    return;
+  }
+
   const { search, estado } = state.filters.inspect;
   const { key, dir } = state.sort.inspect;
   let rows = applyFilters(
@@ -1535,6 +1599,10 @@ function renderInspect() {
         <div class="page-subtitle">${state.data.inspect.length} propostas · ${rows.length} visíveis</div>
       </div>
       <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
+        </div>
         <button class="btn btn-secondary" onclick="exportInspect()">⬇ Export XLSX</button>
         ${isAdmin() ? `
           <button class="btn btn-secondary" onclick="importInspect()">⬆ Import XLSX</button>
@@ -1592,6 +1660,421 @@ function renderInspect() {
       </div>
     </div>
   `;
+}
+
+function switchInspectView(view) {
+  state.inspectView = view;
+  renderInspect();
+}
+
+// ============================================================
+// ACEITAR INSPECT — VISTA DE ANÁLISE
+// ============================================================
+function renderInspectAnalise() {
+  const data = state.data.inspect;
+
+  // KPIs
+  const totalOrcamentado = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  const adjudicadosArr = data.filter(r => ['Aceite','Em execução','Concluída'].includes(r.estado));
+  const valorAdjudicado = adjudicadosArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  const pipelineArr = data.filter(r => ['Pendente','Enviada'].includes(r.estado));
+  const valorPipeline = pipelineArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  // Taxa de conversão: Aceites / (Aceites + Rejeitadas + Em execução + Concluída)
+  //   — considera apenas propostas com decisão já tomada (positiva ou negativa)
+  const aceites = adjudicadosArr.length;
+  const rejeitadas = data.filter(r => r.estado === 'Rejeitada').length;
+  const decididas = aceites + rejeitadas;
+  const taxaConversao = decididas > 0 ? (aceites / decididas * 100) : 0;
+  const comCoords = data.filter(r => r.latitude && r.longitude).length;
+  const semCoords = data.filter(r =>
+    (r.localizacao || r.morada_completa) && (!r.latitude || !r.longitude)
+  ).length;
+
+  $('#section-inspect').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Aceitar Inspect — Análise</div>
+        <div class="page-subtitle">${data.length} propostas no total</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
+        </div>
+        ${isAdmin() && semCoords > 0 ? `
+          <button class="btn btn-secondary" onclick="geocodeAllInspect()" title="Geocodificar ${semCoords} registos sem coordenadas">
+            📍 Geocodificar (${semCoords})
+          </button>
+        ` : ''}
+        ${isAdmin() ? `
+          <button class="btn btn-gold" onclick="runAnalysisInspectGlobal()">✨ Insights IA</button>
+        ` : ''}
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Total orçamentado</div>
+        <div class="kpi-value">${fmtCurrency(totalOrcamentado)}</div>
+        <div class="kpi-sub">${data.length} propostas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Adjudicado</div>
+        <div class="kpi-value" style="color:var(--success)">${fmtCurrency(valorAdjudicado)}</div>
+        <div class="kpi-sub">${aceites} propostas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pipeline em aberto</div>
+        <div class="kpi-value" style="color:var(--warning)">${fmtCurrency(valorPipeline)}</div>
+        <div class="kpi-sub">${pipelineArr.length} propostas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Taxa de conversão</div>
+        <div class="kpi-value">${taxaConversao.toFixed(1)}%</div>
+        <div class="kpi-sub">${aceites} aceites / ${decididas} decididas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ticket médio (adjudicado)</div>
+        <div class="kpi-value">${fmtCurrency(aceites > 0 ? valorAdjudicado / aceites : 0)}</div>
+        <div class="kpi-sub">por proposta aceite</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Propostas por mês (últimos 12 meses)</div></div>
+        <div class="card-body"><canvas id="chart-inspect-mes"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Evolução cumulativa (valor)</div></div>
+        <div class="card-body"><canvas id="chart-inspect-evol"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Distribuição por estado</div></div>
+        <div class="card-body"><canvas id="chart-inspect-estado"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Top tipos de serviço</div></div>
+        <div class="card-body"><canvas id="chart-inspect-tipo"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card mb-lg">
+      <div class="card-header">
+        <div class="card-title">Localização das propostas</div>
+        <div class="text-small text-muted">${comCoords} no mapa · ${semCoords} por geocodificar</div>
+      </div>
+      <div id="mapa-inspect"></div>
+    </div>
+
+    <div id="ia-insights-inspect" class="ia-panel mb-lg">
+      <h4>Insights IA</h4>
+      <div class="text-muted text-small">Clica em "Insights IA" no topo da página para gerar análise automática dos dados.</div>
+    </div>
+  `;
+
+  // Destroy existing charts to avoid duplicates
+  Object.values(state.charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  state.charts = {};
+  if (state.map) { try { state.map.remove(); } catch(e){} state.map = null; }
+
+  // ---------- CHART: Propostas por mês ----------
+  const mesesLabels = [];
+  const mesesData = { Pendente: [], Enviada: [], Aceite: [], Rejeitada: [], 'Em execução': [], Concluída: [], Cancelada: [] };
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = d.toISOString().slice(0, 7);
+    const label = d.toLocaleDateString('pt-PT', { month: 'short', year: '2-digit' });
+    mesesLabels.push(label);
+    Object.keys(mesesData).forEach(estado => {
+      const count = data.filter(r =>
+        r.estado === estado &&
+        r.data_proposta && r.data_proposta.slice(0, 7) === key
+      ).length;
+      mesesData[estado].push(count);
+    });
+  }
+  const estadoColors = {
+    Pendente: '#fbbf24',
+    Enviada: '#60a5fa',
+    Aceite: '#34d399',
+    Rejeitada: '#f87171',
+    'Em execução': '#fb923c',
+    Concluída: '#22c55e',
+    Cancelada: '#94a3b8'
+  };
+  state.charts.mes = new Chart($('#chart-inspect-mes'), {
+    type: 'bar',
+    data: {
+      labels: mesesLabels,
+      datasets: Object.keys(mesesData)
+        .filter(k => mesesData[k].some(v => v > 0))
+        .map(k => ({ label: k, data: mesesData[k], backgroundColor: estadoColors[k] }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }
+    }
+  });
+
+  // ---------- CHART: Evolução cumulativa ----------
+  const sorted = [...data].filter(r => r.data_proposta).sort((a, b) => a.data_proposta.localeCompare(b.data_proposta));
+  let cumulativo = 0, cumulativoAdj = 0;
+  const evolLabels = [], evolTotal = [], evolAdj = [];
+  sorted.forEach(r => {
+    cumulativo += Number(r.valor_sem_iva) || 0;
+    if (['Aceite','Em execução','Concluída'].includes(r.estado)) {
+      cumulativoAdj += Number(r.valor_sem_iva) || 0;
+    }
+    evolLabels.push(r.data_proposta);
+    evolTotal.push(cumulativo);
+    evolAdj.push(cumulativoAdj);
+  });
+  state.charts.evol = new Chart($('#chart-inspect-evol'), {
+    type: 'line',
+    data: {
+      labels: evolLabels,
+      datasets: [
+        { label: 'Total orçamentado', data: evolTotal, borderColor: '#1a3a5c', backgroundColor: 'rgba(26,58,92,0.08)', fill: true, tension: 0.2, pointRadius: 2 },
+        { label: 'Adjudicado', data: evolAdj, borderColor: '#c9a24a', backgroundColor: 'rgba(201,162,74,0.15)', fill: true, tension: 0.2, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => (v/1000).toFixed(0) + 'k' } },
+        x: { ticks: { maxTicksLimit: 8, font: { size: 10 } } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtCurrency(ctx.parsed.y) } }
+      }
+    }
+  });
+
+  // ---------- CHART: Distribuição por estado ----------
+  const countsEstado = {};
+  data.forEach(r => { countsEstado[r.estado] = (countsEstado[r.estado]||0)+1; });
+  state.charts.estado = new Chart($('#chart-inspect-estado'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(countsEstado),
+      datasets: [{
+        data: Object.values(countsEstado),
+        backgroundColor: Object.keys(countsEstado).map(k => estadoColors[k] || '#6b6b6b')
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+    }
+  });
+
+  // ---------- CHART: Top tipos de serviço ----------
+  const countsTipo = {};
+  const valorTipo = {};
+  data.forEach(r => {
+    const t = r.tipo_servico || '(n/d)';
+    countsTipo[t] = (countsTipo[t]||0) + 1;
+    valorTipo[t] = (valorTipo[t]||0) + (Number(r.valor_sem_iva) || 0);
+  });
+  const tiposSorted = Object.keys(countsTipo).sort((a,b) => countsTipo[b] - countsTipo[a]).slice(0, 8);
+  state.charts.tipo = new Chart($('#chart-inspect-tipo'), {
+    type: 'bar',
+    data: {
+      labels: tiposSorted,
+      datasets: [
+        { label: 'Nº propostas', data: tiposSorted.map(t => countsTipo[t]), backgroundColor: '#1a3a5c', yAxisID: 'y' },
+        { label: 'Valor total (€)', data: tiposSorted.map(t => valorTipo[t]), backgroundColor: '#c9a24a', yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        y: { ticks: { font: { size: 11 } } },
+        x: { beginAtZero: true, display: false }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.dataset.label === 'Valor total (€)'
+              ? 'Valor: ' + fmtCurrency(ctx.parsed.x)
+              : 'Nº: ' + ctx.parsed.x
+          }
+        }
+      }
+    }
+  });
+
+  // ---------- MAP ----------
+  setTimeout(() => initInspectMap(), 100);
+}
+
+// ---------- MAP ----------
+function initInspectMap() {
+  const mapEl = $('#mapa-inspect');
+  if (!mapEl) return;
+
+  // Portugal bounds default
+  const map = L.map(mapEl).setView([39.5, -8.0], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19
+  }).addTo(map);
+
+  state.map = map;
+
+  const withCoords = state.data.inspect.filter(r => r.latitude && r.longitude);
+  if (withCoords.length === 0) return;
+
+  const cluster = L.markerClusterGroup();
+  withCoords.forEach(r => {
+    const marker = L.marker([r.latitude, r.longitude]);
+    const popupHTML = `
+      <strong>${escapeHtml(r.cliente || '(sem cliente)')}</strong><br>
+      ${r.id_referencia ? escapeHtml(r.id_referencia) + '<br>' : ''}
+      ${escapeHtml(r.localizacao || r.morada_completa || '')}<br>
+      ${fmtCurrency(r.valor_sem_iva)} · ${r.estado || ''}<br>
+      <a href="#" onclick="closePopupAndOpenInspect('${r.id}');return false;">Ver detalhes →</a>
+    `;
+    marker.bindPopup(popupHTML);
+    cluster.addLayer(marker);
+  });
+  map.addLayer(cluster);
+
+  const bounds = L.latLngBounds(withCoords.map(r => [r.latitude, r.longitude]));
+  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+}
+
+function closePopupAndOpenInspect(id) {
+  if (state.map) state.map.closePopup();
+  openInspectDetail(id);
+}
+
+// ---------- GEOCODING (Nominatim) ----------
+async function geocodeAddress(query) {
+  if (!query || !query.trim()) return null;
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pt&q=' + encodeURIComponent(query);
+  try {
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!resp.ok) return null;
+    const results = await resp.json();
+    if (results && results.length > 0) {
+      return {
+        lat: parseFloat(results[0].lat),
+        lon: parseFloat(results[0].lon)
+      };
+    }
+  } catch (e) {
+    console.warn('Geocode falhou:', e);
+  }
+  return null;
+}
+
+async function geocodeAllInspect() {
+  const pending = state.data.inspect.filter(r =>
+    (r.localizacao || r.morada_completa) && (!r.latitude || !r.longitude)
+  );
+  if (pending.length === 0) {
+    showToast('Nada para geocodificar', 'success');
+    return;
+  }
+  if (!confirm('Vai geocodificar ' + pending.length + ' registos. Isto demora ~' + pending.length + ' segundos (limite de 1 pedido/seg do OpenStreetMap). Continuar?')) return;
+
+  showToast('A geocodificar ' + pending.length + ' registos...', '');
+  let ok = 0, fail = 0;
+  for (const r of pending) {
+    const query = [r.morada_completa, r.localizacao].filter(Boolean).join(', ');
+    const coords = await geocodeAddress(query);
+    if (coords) {
+      await sb.from('inspect_propostas').update({
+        latitude: coords.lat,
+        longitude: coords.lon,
+        geocoded_at: new Date().toISOString()
+      }).eq('id', r.id);
+      ok++;
+    } else {
+      fail++;
+    }
+    // Rate limit Nominatim: max 1 req/sec
+    await new Promise(res => setTimeout(res, 1100));
+  }
+  showToast('Geocodificado: ' + ok + ' ok, ' + fail + ' falhas', 'success');
+  await reloadTable('inspect');
+  renderInspect();
+}
+
+// ---------- AI GLOBAL INSIGHTS ----------
+async function runAnalysisInspectGlobal() {
+  const panel = $('#ia-insights-inspect');
+  panel.innerHTML = `<h4>Insights IA</h4><div class="ia-loading"><div class="spinner"></div>A analisar...</div>`;
+
+  // Agregar dados para enviar ao Claude
+  const data = state.data.inspect;
+  const totalOrc = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  const adjArr = data.filter(r => ['Aceite','Em execução','Concluída'].includes(r.estado));
+  const valAdj = adjArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  const pipeArr = data.filter(r => ['Pendente','Enviada'].includes(r.estado));
+  const valPipe = pipeArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
+  const aceites = adjArr.length;
+  const rejeitadas = data.filter(r => r.estado === 'Rejeitada').length;
+  const decididas = aceites + rejeitadas;
+  const taxa = decididas > 0 ? (aceites / decididas * 100) : 0;
+
+  const porEstado = {};
+  data.forEach(r => { porEstado[r.estado] = (porEstado[r.estado]||0)+1; });
+
+  const porTipo = {};
+  data.forEach(r => {
+    const t = r.tipo_servico || '(n/d)';
+    porTipo[t] = porTipo[t] || { count: 0, valor: 0 };
+    porTipo[t].count++;
+    porTipo[t].valor += Number(r.valor_sem_iva) || 0;
+  });
+
+  const porCanal = {};
+  data.forEach(r => {
+    const c = r.canal_origem || '(n/d)';
+    porCanal[c] = porCanal[c] || { count: 0, aceites: 0 };
+    porCanal[c].count++;
+    if (['Aceite','Em execução','Concluída'].includes(r.estado)) porCanal[c].aceites++;
+  });
+
+  const agregados = {
+    total_propostas: data.length,
+    total_orcamentado_eur: Math.round(totalOrc),
+    valor_adjudicado_eur: Math.round(valAdj),
+    valor_pipeline_eur: Math.round(valPipe),
+    aceites: aceites, rejeitadas: rejeitadas,
+    taxa_conversao_pct: Number(taxa.toFixed(1)),
+    ticket_medio_adjudicado_eur: aceites > 0 ? Math.round(valAdj / aceites) : 0,
+    por_estado: porEstado,
+    por_tipo_servico: porTipo,
+    por_canal: porCanal
+  };
+
+  try {
+    const resp = await fetch('/api/analisar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'inspect_global', record: agregados })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const d = await resp.json();
+    panel.innerHTML = `
+      <h4>Insights IA</h4>
+      <div class="ia-content">${escapeHtml(d.analysis)}</div>
+      <div class="ia-meta">Gerada em ${fmtDateTime(new Date().toISOString())}</div>
+      <div class="mt"><button class="btn btn-secondary btn-sm" onclick="runAnalysisInspectGlobal()">🔄 Regenerar</button></div>
+    `;
+  } catch (e) {
+    panel.innerHTML = `<h4>Insights IA</h4><div style="color:var(--danger)">${escapeHtml(e.message)}</div>
+      <div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisInspectGlobal()">Tentar novamente</button></div>`;
+  }
 }
 
 function openInspectModal(id) {
@@ -1698,6 +2181,23 @@ async function saveInspect(id) {
     return;
   }
   if (rec.valor_sem_iva) rec.valor_sem_iva = parseFloat(rec.valor_sem_iva);
+
+  // Auto-geocode if editing with changed address or creating new with address
+  const existing = id ? state.data.inspect.find(x => x.id === id) : null;
+  const addressChanged = !existing ||
+    existing.localizacao !== rec.localizacao ||
+    existing.morada_completa !== rec.morada_completa;
+  const hasAddress = rec.localizacao || rec.morada_completa;
+
+  if (hasAddress && addressChanged) {
+    const query = [rec.morada_completa, rec.localizacao].filter(Boolean).join(', ');
+    const coords = await geocodeAddress(query);
+    if (coords) {
+      rec.latitude = coords.lat;
+      rec.longitude = coords.lon;
+      rec.geocoded_at = new Date().toISOString();
+    }
+  }
 
   let error;
   if (id) {
