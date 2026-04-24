@@ -4,7 +4,7 @@
 // Body: { type: 'concurso' | 'inspect', record: {...} }
 // ============================================================
 
-export const config = { runtime: 'nodejs20.x' };
+export const config = { runtime: 'nodejs' };
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = 'claude-sonnet-4-6';
