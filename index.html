@@ -442,17 +442,88 @@
       white-space: nowrap;
     }
     .badge-pendente { background: #fef3c7; color: #92400e; }
+    .badge-emaberto { background: #e0f2fe; color: #075985; }
     .badge-preparacao { background: #dbeafe; color: #1e40af; }
     .badge-submetido { background: #e0e7ff; color: #3730a3; }
     .badge-enviada { background: #e0e7ff; color: #3730a3; }
-    .badge-adjudicado { background: var(--success-bg); color: var(--success); }
+    .badge-adjudicado,
+    .badge-adjudicada { background: var(--success-bg); color: var(--success); }
     .badge-aceite { background: var(--success-bg); color: var(--success); }
-    .badge-naoadjudicado { background: var(--danger-bg); color: var(--danger); }
+    .badge-naoadjudicado,
+    .badge-naoadjudicada { background: var(--danger-bg); color: var(--danger); }
     .badge-rejeitada { background: var(--danger-bg); color: var(--danger); }
     .badge-execucao { background: #fff3e0; color: #b85c00; }
+    .badge-realizada { background: #fff3e0; color: #b85c00; }
+    .badge-comrelatorio { background: #ede9fe; color: #5b21b6; }
     .badge-concluida { background: #e8f5ec; color: var(--success); }
+    .badge-fechada { background: #d1fae5; color: #065f46; }
     .badge-cancelada,
     .badge-cancelado { background: #f1f5f9; color: #475569; }
+
+    /* Workflow stepper */
+    .workflow-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      background: var(--bg-muted);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+    }
+    .workflow-step {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      background: white;
+      color: var(--text-soft);
+      border: 1px solid var(--border-light);
+      white-space: nowrap;
+    }
+    .workflow-step.active {
+      background: var(--gold);
+      color: var(--navy-dark);
+      border-color: var(--gold);
+    }
+    .workflow-step.done {
+      background: var(--success);
+      color: white;
+      border-color: var(--success);
+    }
+    .workflow-step.cancelled {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+    }
+    .workflow-arrow { color: var(--text-soft); font-size: 12px; }
+    .workflow-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    /* Anexos */
+    .anexo-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      background: white;
+    }
+    .anexo-item.relatorio {
+      background: linear-gradient(90deg, #faf6ed, white);
+      border-color: var(--gold-light);
+    }
+    .anexo-icon { font-size: 20px; }
+    .anexo-info { flex: 1; min-width: 0; }
+    .anexo-nome { font-weight: 600; font-size: 13px; word-break: break-all; }
+    .anexo-meta { font-size: 11px; color: var(--text-muted); }
+    .anexo-actions { display: flex; gap: 4px; }
 
     /* ========== MODALS ========== */
     .modal-overlay {
@@ -781,8 +852,8 @@ const CONFIG = {
   ],
 
   INSPECT_ESTADOS: [
-    'Pendente', 'Enviada', 'Aceite', 'Rejeitada',
-    'Em execução', 'Concluída', 'Cancelada'
+    'Em Aberto', 'Pendente', 'Enviada', 'Adjudicada', 'Não Adjudicada',
+    'Realizada', 'Com Relatório', 'Fechada', 'Cancelada'
   ],
   INSPECT_TIPOS_SERVICO: [
     'Pré-compra', 'Pré-venda', 'Receção provisória', 'Receção definitiva',
@@ -791,7 +862,38 @@ const CONFIG = {
   INSPECT_CANAIS: [
     'Website', 'Referência', 'Google', 'LinkedIn', 'Instagram',
     'Email direto', 'Cliente recorrente', 'Outro'
-  ]
+  ],
+
+  // Workflow: { de: [{ para, label, dataField, dataLabel, extra? }] }
+  INSPECT_WORKFLOW: {
+    'Em Aberto': [
+      { para: 'Pendente', label: 'Marcar como Pendente', dataField: 'data_pendente', dataLabel: 'Data' },
+      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio' },
+      { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
+    ],
+    'Pendente': [
+      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio' },
+      { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
+    ],
+    'Enviada': [
+      { para: 'Adjudicada', label: 'Adjudicar', dataField: 'data_adjudicacao', dataLabel: 'Data de adjudicação', extra: { field: 'data_inspecao', label: 'Data de inspeção' } },
+      { para: 'Não Adjudicada', label: 'Não adjudicada', dataField: 'data_nao_adjudicacao', dataLabel: 'Data', danger: true },
+      { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
+    ],
+    'Adjudicada': [
+      { para: 'Realizada', label: 'Marcar como Realizada', dataField: 'data_realizacao', dataLabel: 'Data de realização' },
+      { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
+    ],
+    'Realizada': [
+      { para: 'Com Relatório', label: 'Marcar Com Relatório', dataField: 'data_relatorio', dataLabel: 'Data do relatório' }
+    ],
+    'Com Relatório': [
+      { para: 'Fechada', label: 'Fechar', dataField: 'data_fechado', dataLabel: 'Data de fecho' }
+    ],
+    'Não Adjudicada': [],
+    'Fechada': [],
+    'Cancelada': []
+  }
 };
 
 // ---------- SUPABASE CLIENT ----------
@@ -1136,11 +1238,11 @@ function renderDashboard() {
     .reduce((s, x) => s + (Number(x.valor_base) || 0), 0);
 
   const propostasPendentes = i.filter(x =>
-    ['Pendente', 'Enviada'].includes(x.estado)
+    ['Em Aberto', 'Pendente', 'Enviada'].includes(x.estado)
   ).length;
-  const propostasAceites = i.filter(x => x.estado === 'Aceite').length;
+  const propostasAceites = i.filter(x => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(x.estado)).length;
   const valorPropostas = i
-    .filter(x => ['Aceite', 'Em execução', 'Concluída'].includes(x.estado))
+    .filter(x => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(x.estado))
     .reduce((s, x) => s + (Number(x.valor_sem_iva) || 0), 0);
 
   // Entregas próximas
@@ -1675,14 +1777,13 @@ function renderInspectAnalise() {
 
   // KPIs
   const totalOrcamentado = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const adjudicadosArr = data.filter(r => ['Aceite','Em execução','Concluída'].includes(r.estado));
+  const adjudicadosArr = data.filter(r => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado));
   const valorAdjudicado = adjudicadosArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const pipelineArr = data.filter(r => ['Pendente','Enviada'].includes(r.estado));
+  const pipelineArr = data.filter(r => ['Em Aberto','Pendente','Enviada'].includes(r.estado));
   const valorPipeline = pipelineArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  // Taxa de conversão: Aceites / (Aceites + Rejeitadas + Em execução + Concluída)
-  //   — considera apenas propostas com decisão já tomada (positiva ou negativa)
+  // Taxa de conversão: Adjudicadas / (Adjudicadas + Não Adjudicadas)
   const aceites = adjudicadosArr.length;
-  const rejeitadas = data.filter(r => r.estado === 'Rejeitada').length;
+  const rejeitadas = data.filter(r => r.estado === 'Não Adjudicada').length;
   const decididas = aceites + rejeitadas;
   const taxaConversao = decididas > 0 ? (aceites / decididas * 100) : 0;
   const comCoords = data.filter(r => r.latitude && r.longitude).length;
@@ -1780,7 +1881,11 @@ function renderInspectAnalise() {
 
   // ---------- CHART: Propostas por mês ----------
   const mesesLabels = [];
-  const mesesData = { Pendente: [], Enviada: [], Aceite: [], Rejeitada: [], 'Em execução': [], Concluída: [], Cancelada: [] };
+  const mesesData = {
+    'Em Aberto': [], 'Pendente': [], 'Enviada': [],
+    'Adjudicada': [], 'Não Adjudicada': [],
+    'Realizada': [], 'Com Relatório': [], 'Fechada': [], 'Cancelada': []
+  };
   const now = new Date();
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -1796,13 +1901,15 @@ function renderInspectAnalise() {
     });
   }
   const estadoColors = {
-    Pendente: '#fbbf24',
-    Enviada: '#60a5fa',
-    Aceite: '#34d399',
-    Rejeitada: '#f87171',
-    'Em execução': '#fb923c',
-    Concluída: '#22c55e',
-    Cancelada: '#94a3b8'
+    'Em Aberto': '#0ea5e9',
+    'Pendente': '#fbbf24',
+    'Enviada': '#60a5fa',
+    'Adjudicada': '#34d399',
+    'Não Adjudicada': '#f87171',
+    'Realizada': '#fb923c',
+    'Com Relatório': '#a78bfa',
+    'Fechada': '#22c55e',
+    'Cancelada': '#94a3b8'
   };
   state.charts.mes = new Chart($('#chart-inspect-mes'), {
     type: 'bar',
@@ -1825,7 +1932,7 @@ function renderInspectAnalise() {
   const evolLabels = [], evolTotal = [], evolAdj = [];
   sorted.forEach(r => {
     cumulativo += Number(r.valor_sem_iva) || 0;
-    if (['Aceite','Em execução','Concluída'].includes(r.estado)) {
+    if (['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado)) {
       cumulativoAdj += Number(r.valor_sem_iva) || 0;
     }
     evolLabels.push(r.data_proposta);
@@ -2016,12 +2123,12 @@ async function runAnalysisInspectGlobal() {
   // Agregar dados para enviar ao Claude
   const data = state.data.inspect;
   const totalOrc = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const adjArr = data.filter(r => ['Aceite','Em execução','Concluída'].includes(r.estado));
+  const adjArr = data.filter(r => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado));
   const valAdj = adjArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const pipeArr = data.filter(r => ['Pendente','Enviada'].includes(r.estado));
+  const pipeArr = data.filter(r => ['Em Aberto','Pendente','Enviada'].includes(r.estado));
   const valPipe = pipeArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
   const aceites = adjArr.length;
-  const rejeitadas = data.filter(r => r.estado === 'Rejeitada').length;
+  const rejeitadas = data.filter(r => r.estado === 'Não Adjudicada').length;
   const decididas = aceites + rejeitadas;
   const taxa = decididas > 0 ? (aceites / decididas * 100) : 0;
 
@@ -2041,7 +2148,7 @@ async function runAnalysisInspectGlobal() {
     const c = r.canal_origem || '(n/d)';
     porCanal[c] = porCanal[c] || { count: 0, aceites: 0 };
     porCanal[c].count++;
-    if (['Aceite','Em execução','Concluída'].includes(r.estado)) porCanal[c].aceites++;
+    if (['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado)) porCanal[c].aceites++;
   });
 
   const agregados = {
@@ -2078,10 +2185,13 @@ async function runAnalysisInspectGlobal() {
 }
 
 function openInspectModal(id) {
-  const r = id ? state.data.inspect.find(x => x.id === id) : { data_proposta: new Date().toISOString().slice(0,10) };
+  const r = id ? state.data.inspect.find(x => x.id === id) : {
+    data_proposta: new Date().toISOString().slice(0,10),
+    data_abertura: new Date().toISOString().slice(0,10),
+    estado: 'Em Aberto'
+  };
   const tipoOpts = CONFIG.INSPECT_TIPOS_SERVICO.map(t => `<option ${r.tipo_servico===t?'selected':''}>${t}</option>`).join('');
   const canalOpts = CONFIG.INSPECT_CANAIS.map(c => `<option ${r.canal_origem===c?'selected':''}>${c}</option>`).join('');
-  const estadoOpts = CONFIG.INSPECT_ESTADOS.map(s => `<option ${r.estado===s?'selected':''}>${s}</option>`).join('');
 
   showModal(`
     <div class="modal-header">
@@ -2137,15 +2247,16 @@ function openInspectModal(id) {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Estado</label>
-            <select class="form-control" name="estado">${estadoOpts}</select>
-          </div>
-          <div class="form-group">
             <label>Canal de Origem</label>
             <select class="form-control" name="canal_origem">
               <option value="">Selecionar...</option>
               ${canalOpts}
             </select>
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <input class="form-control" value="${escapeHtml(r.estado || 'Em Aberto')}" disabled>
+            <input type="hidden" name="estado" value="${escapeHtml(r.estado || 'Em Aberto')}">
           </div>
         </div>
         <div class="form-group">
@@ -2224,17 +2335,65 @@ function deleteInspect(id) {
   });
 }
 
-function openInspectDetail(id) {
+async function openInspectDetail(id) {
   const r = state.data.inspect.find(x => x.id === id);
   if (!r) return;
+
+  // Carregar anexos
+  const { data: anexos } = await sb.from('inspect_anexos')
+    .select('*').eq('proposta_id', id).order('created_at', { ascending: false });
+
+  const transicoesPossiveis = CONFIG.INSPECT_WORKFLOW[r.estado] || [];
+
+  // Anexos visíveis em: Em Aberto, Pendente, Adjudicada (e Com Relatório para o relatório)
+  const podeAnexarGenerico = ['Em Aberto', 'Pendente', 'Adjudicada'].includes(r.estado);
+  const podeAnexarRelatorio = r.estado === 'Com Relatório';
+  const mostraAnexos = podeAnexarGenerico || podeAnexarRelatorio || (anexos && anexos.length > 0);
+
+  // Workflow stepper
+  const ordemEstados = ['Em Aberto','Pendente','Enviada','Adjudicada','Realizada','Com Relatório','Fechada'];
+  const isCancelado = r.estado === 'Cancelada';
+  const isNaoAdj = r.estado === 'Não Adjudicada';
+  const idxAtual = ordemEstados.indexOf(r.estado);
+
+  const stepperHTML = ordemEstados.map((estado, i) => {
+    let cls = 'workflow-step';
+    if (isCancelado) cls += ' cancelled';
+    else if (estado === r.estado) cls += ' active';
+    else if (idxAtual >= 0 && i < idxAtual) cls += ' done';
+    return `<span class="${cls}">${estado}</span>` + (i < ordemEstados.length - 1 ? '<span class="workflow-arrow">→</span>' : '');
+  }).join('');
+
   showModal(`
     <div class="modal-header">
-      <div class="modal-title">${escapeHtml(r.cliente)}</div>
+      <div>
+        <div class="modal-title">${escapeHtml(r.cliente)}</div>
+        ${r.id_referencia ? `<div class="text-small text-muted">${escapeHtml(r.id_referencia)}</div>` : ''}
+      </div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
+
+      <!-- Workflow stepper -->
+      <div class="workflow-bar">
+        ${isCancelado ? `<span class="workflow-step cancelled">Cancelada</span>` : ''}
+        ${isNaoAdj ? `<span class="workflow-step cancelled">Não Adjudicada</span>` : ''}
+        ${!isCancelado && !isNaoAdj ? stepperHTML : ''}
+      </div>
+
+      ${isAdmin() && transicoesPossiveis.length > 0 ? `
+        <div class="workflow-actions">
+          ${transicoesPossiveis.map(t => `
+            <button class="btn ${t.danger ? 'btn-secondary' : 'btn-primary'} btn-sm"
+                    onclick='openTransitionModal(${JSON.stringify(id)}, ${JSON.stringify(t)})'>
+              ${escapeHtml(t.label)}
+            </button>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Dados -->
       <div class="form-row mb-lg">
-        <div><label class="text-small text-muted">ID</label><div>${escapeHtml(r.id_referencia)}</div></div>
         <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
         <div><label class="text-small text-muted">Data da Proposta</label><div>${fmtDate(r.data_proposta)}</div></div>
         <div><label class="text-small text-muted">Email</label><div>${escapeHtml(r.email)}</div></div>
@@ -2244,10 +2403,53 @@ function openInspectDetail(id) {
         <div><label class="text-small text-muted">Tipo Serviço</label><div>${escapeHtml(r.tipo_servico)}</div></div>
         <div><label class="text-small text-muted">Valor s/ IVA</label><div>${fmtCurrency(r.valor_sem_iva)}</div></div>
         <div><label class="text-small text-muted">Canal</label><div>${escapeHtml(r.canal_origem)}</div></div>
-        <div><label class="text-small text-muted">Data de Envio</label><div>${fmtDate(r.data_envio)}</div></div>
-        <div><label class="text-small text-muted">Data de Adjudicação</label><div>${fmtDate(r.data_adjudicacao)}</div></div>
       </div>
+
+      <!-- Datas de transição -->
+      <div class="form-row mb-lg">
+        ${r.data_abertura ? `<div><label class="text-small text-muted">Aberta em</label><div>${fmtDate(r.data_abertura)}</div></div>` : ''}
+        ${r.data_pendente ? `<div><label class="text-small text-muted">Pendente em</label><div>${fmtDate(r.data_pendente)}</div></div>` : ''}
+        ${r.data_envio ? `<div><label class="text-small text-muted">Enviada em</label><div>${fmtDate(r.data_envio)}</div></div>` : ''}
+        ${r.data_adjudicacao ? `<div><label class="text-small text-muted">Adjudicada em</label><div>${fmtDate(r.data_adjudicacao)}</div></div>` : ''}
+        ${r.data_inspecao ? `<div><label class="text-small text-muted">Inspeção</label><div><strong style="color:var(--gold-dark)">${fmtDate(r.data_inspecao)}</strong></div></div>` : ''}
+        ${r.data_realizacao ? `<div><label class="text-small text-muted">Realizada em</label><div>${fmtDate(r.data_realizacao)}</div></div>` : ''}
+        ${r.data_relatorio ? `<div><label class="text-small text-muted">Relatório em</label><div>${fmtDate(r.data_relatorio)}</div></div>` : ''}
+        ${r.data_fechado ? `<div><label class="text-small text-muted">Fechada em</label><div>${fmtDate(r.data_fechado)}</div></div>` : ''}
+        ${r.data_nao_adjudicacao ? `<div><label class="text-small text-muted">Não adjudicada em</label><div>${fmtDate(r.data_nao_adjudicacao)}</div></div>` : ''}
+        ${r.data_cancelado ? `<div><label class="text-small text-muted">Cancelada em</label><div>${fmtDate(r.data_cancelado)}</div></div>` : ''}
+      </div>
+
       ${r.notas ? `<div class="mb-lg"><label class="text-small text-muted">Notas</label><div style="white-space:pre-wrap;padding-top:4px;">${escapeHtml(r.notas)}</div></div>` : ''}
+
+      ${mostraAnexos ? `
+        <div class="card mb-lg">
+          <div class="card-header">
+            <div class="card-title">Anexos${anexos && anexos.length ? ` (${anexos.length})` : ''}</div>
+            ${isAdmin() ? `
+              <div class="flex gap-sm">
+                ${podeAnexarGenerico ? `<button class="btn btn-secondary btn-sm" onclick="uploadAnexo('${id}', 'generico')">+ Adicionar</button>` : ''}
+                ${podeAnexarRelatorio ? `<button class="btn btn-gold btn-sm" onclick="uploadAnexo('${id}', 'relatorio')">+ Adicionar Relatório</button>` : ''}
+                ${podeAnexarRelatorio ? `<button class="btn btn-secondary btn-sm" onclick="uploadAnexo('${id}', 'generico')">+ Outro</button>` : ''}
+              </div>
+            ` : ''}
+          </div>
+          <div class="card-body">
+            ${(!anexos || anexos.length === 0) ? `<div class="text-muted text-small">Sem anexos</div>` : anexos.map(a => `
+              <div class="anexo-item ${a.tipo === 'relatorio' ? 'relatorio' : ''}">
+                <span class="anexo-icon">${a.tipo === 'relatorio' ? '📄' : iconForMime(a.mime_type, a.nome)}</span>
+                <div class="anexo-info">
+                  <div class="anexo-nome">${escapeHtml(a.nome)}${a.tipo === 'relatorio' ? ' <span style="color:var(--gold-dark);font-size:10px;font-weight:700">RELATÓRIO</span>' : ''}</div>
+                  <div class="anexo-meta">${fmtBytes(a.tamanho_bytes)} · ${fmtDateTime(a.created_at)}</div>
+                </div>
+                <div class="anexo-actions">
+                  <button class="btn btn-ghost btn-sm" onclick="downloadAnexo('${a.storage_path}', '${escapeHtml(a.nome).replace(/'/g, "\\'")}')">⬇</button>
+                  ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAnexo('${a.id}', '${a.storage_path}', '${id}')">🗑</button>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
       <div class="ia-panel" id="ia-panel-inspect">
         ${r.analise_ia ? `
@@ -2266,7 +2468,138 @@ function openInspectDetail(id) {
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
       ${isAdmin() ? `<button class="btn btn-primary" onclick="closeModal(); openInspectModal('${r.id}')">Editar</button>` : ''}
     </div>
-  `);
+  `, 'lg');
+}
+
+// ---------- WORKFLOW TRANSITIONS ----------
+function openTransitionModal(id, transicao) {
+  const today = new Date().toISOString().slice(0,10);
+  const extraField = transicao.extra ? `
+    <div class="form-group">
+      <label>${transicao.extra.label} <span class="required">*</span></label>
+      <input type="date" class="form-control" id="extra-date" value="${today}" required>
+    </div>
+  ` : '';
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${escapeHtml(transicao.label)}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>${transicao.dataLabel} <span class="required">*</span></label>
+        <input type="date" class="form-control" id="transition-date" value="${today}" required>
+      </div>
+      ${extraField}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn ${transicao.danger ? 'btn-danger' : 'btn-primary'}" id="confirm-transition">Confirmar</button>
+    </div>
+  `, 'sm');
+
+  $('#confirm-transition').onclick = async () => {
+    const dateValue = $('#transition-date').value;
+    if (!dateValue) { showToast('Data obrigatória', 'error'); return; }
+
+    const update = {
+      estado: transicao.para,
+      [transicao.dataField]: dateValue
+    };
+
+    if (transicao.extra) {
+      const extraValue = $('#extra-date').value;
+      if (!extraValue) { showToast(transicao.extra.label + ' obrigatória', 'error'); return; }
+      update[transicao.extra.field] = extraValue;
+    }
+
+    const { error } = await sb.from('inspect_propostas').update(update).eq('id', id);
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    closeModal();
+    await reloadTable('inspect');
+    renderInspect();
+    openInspectDetail(id);
+    showToast('Estado atualizado para ' + transicao.para, 'success');
+  };
+}
+
+// ---------- ANEXOS ----------
+function fmtBytes(b) {
+  if (!b) return '—';
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+function iconForMime(mime, nome) {
+  const ext = (nome || '').split('.').pop().toLowerCase();
+  if ((mime || '').startsWith('image/') || ['jpg','jpeg','png','gif','webp'].includes(ext)) return '🖼️';
+  if (mime === 'application/pdf' || ext === 'pdf') return '📕';
+  if (['doc','docx'].includes(ext)) return '📘';
+  if (['xls','xlsx','csv'].includes(ext)) return '📗';
+  if (['zip','rar','7z'].includes(ext)) return '🗜️';
+  return '📎';
+}
+
+function uploadAnexo(propostaId, tipo) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.onchange = async () => {
+    const file = inp.files[0];
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      showToast('Ficheiro demasiado grande (máx 25 MB)', 'error');
+      return;
+    }
+    showToast('A carregar ' + file.name + '...', '');
+    const ext = file.name.split('.').pop();
+    const path = propostaId + '/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    const { error: upErr } = await sb.storage.from('inspect-anexos').upload(path, file, {
+      contentType: file.type,
+      upsert: false
+    });
+    if (upErr) { showToast('Erro upload: ' + upErr.message, 'error'); return; }
+
+    const { error: dbErr } = await sb.from('inspect_anexos').insert({
+      proposta_id: propostaId,
+      tipo: tipo,
+      nome: file.name,
+      storage_path: path,
+      tamanho_bytes: file.size,
+      mime_type: file.type
+    });
+    if (dbErr) {
+      await sb.storage.from('inspect-anexos').remove([path]);
+      showToast('Erro BD: ' + dbErr.message, 'error');
+      return;
+    }
+    showToast('Anexo carregado', 'success');
+    openInspectDetail(propostaId);
+  };
+  inp.click();
+}
+
+async function downloadAnexo(path, nome) {
+  const { data, error } = await sb.storage.from('inspect-anexos').createSignedUrl(path, 60);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  const a = document.createElement('a');
+  a.href = data.signedUrl;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function deleteAnexo(anexoId, path, propostaId) {
+  confirmAction('Eliminar este anexo?', async () => {
+    await sb.storage.from('inspect-anexos').remove([path]);
+    const { error } = await sb.from('inspect_anexos').delete().eq('id', anexoId);
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    showToast('Anexo eliminado', 'success');
+    openInspectDetail(propostaId);
+  });
 }
 
 async function runAnalysisInspect(id) {
