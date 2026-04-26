@@ -2351,8 +2351,11 @@ function openInspectModal(id) {
     data_abertura: new Date().toISOString().slice(0,10),
     estado: 'Em Aberto'
   };
-  const tipoOpts = CONFIG.INSPECT_TIPOS_SERVICO.map(t => `<option ${r.tipo_servico===t?'selected':''}>${t}</option>`).join('');
-  const canalOpts = CONFIG.INSPECT_CANAIS.map(c => `<option ${r.canal_origem===c?'selected':''}>${c}</option>`).join('');
+  // Inclui valores atuais mesmo se não estiverem na lista predefinida
+  const tiposList = [...new Set([...CONFIG.INSPECT_TIPOS_SERVICO, r.tipo_servico].filter(Boolean))];
+  const canaisList = [...new Set([...CONFIG.INSPECT_CANAIS, r.canal_origem].filter(Boolean))];
+  const tipoOpts = tiposList.map(t => `<option ${r.tipo_servico===t?'selected':''}>${t}</option>`).join('');
+  const canalOpts = canaisList.map(c => `<option ${r.canal_origem===c?'selected':''}>${c}</option>`).join('');
 
   showModal(`
     <div class="modal-header">
@@ -2556,15 +2559,17 @@ async function openInspectDetail(id) {
       ` : ''}
 
       <!-- Dados -->
-      <div class="form-row mb-lg">
+      <div class="form-row-3 mb-lg">
+        <div><label class="text-small text-muted">ID</label><div>${r.id_referencia ? escapeHtml(r.id_referencia) : '—'}</div></div>
         <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
-        <div><label class="text-small text-muted">Email</label><div>${escapeHtml(r.email)}</div></div>
-        <div><label class="text-small text-muted">Telefone</label><div>${escapeHtml(r.telefone)}</div></div>
-        <div><label class="text-small text-muted">Localização</label><div>${escapeHtml(r.localizacao)}</div></div>
-        <div><label class="text-small text-muted">Morada</label><div>${escapeHtml(r.morada_completa)}</div></div>
-        <div><label class="text-small text-muted">Tipo Serviço</label><div>${escapeHtml(r.tipo_servico)}</div></div>
+        <div><label class="text-small text-muted">Cliente</label><div>${r.cliente ? escapeHtml(r.cliente) : '—'}</div></div>
+        <div><label class="text-small text-muted">Email</label><div>${r.email ? escapeHtml(r.email) : '—'}</div></div>
+        <div><label class="text-small text-muted">Telefone</label><div>${r.telefone ? escapeHtml(r.telefone) : '—'}</div></div>
+        <div><label class="text-small text-muted">Localização</label><div>${r.localizacao ? escapeHtml(r.localizacao) : '—'}</div></div>
+        <div style="grid-column: span 3"><label class="text-small text-muted">Morada</label><div>${r.morada_completa ? escapeHtml(r.morada_completa) : '—'}</div></div>
+        <div><label class="text-small text-muted">Tipo Serviço</label><div>${r.tipo_servico ? escapeHtml(r.tipo_servico) : '—'}</div></div>
         <div><label class="text-small text-muted">Valor s/ IVA</label><div>${fmtCurrency(r.valor_sem_iva)}</div></div>
-        <div><label class="text-small text-muted">Canal</label><div>${escapeHtml(r.canal_origem)}</div></div>
+        <div><label class="text-small text-muted">Canal</label><div>${r.canal_origem ? escapeHtml(r.canal_origem) : '—'}</div></div>
       </div>
 
       <!-- Datas de transição (sempre visíveis, vazias quando não aplicáveis) -->
