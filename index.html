@@ -274,6 +274,21 @@
     }
     .user-badge.superadmin { background: var(--gold); color: var(--navy-dark); }
     .user-badge.leitor { background: rgba(255,255,255,0.15); color: white; }
+    .app-version {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.3px;
+    }
+    .btn-outline {
+      background: transparent;
+      color: rgba(255,255,255,0.9);
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .btn-outline:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.5);
+    }
 
     /* Main content */
     .main {
@@ -802,6 +817,11 @@
         <button class="nav-link" data-section="comunicacoes">Comunicações</button>
       </div>
       <div class="navbar-user">
+        <span class="app-version" title="Versão da aplicação">v2026.04.26-10h59</span>
+        <label class="btn btn-outline btn-sm" style="cursor:pointer" id="btn-deploy" title="Deploy para GitHub/Vercel">
+          🚀 Deploy
+          <input type="file" accept=".html" style="display:none" onchange="deployToGitHub(this)">
+        </label>
         <span id="user-name"></span>
         <span id="user-badge" class="user-badge"></span>
         <button class="btn btn-ghost btn-sm" style="color: rgba(255,255,255,0.8)" id="logout-btn">Sair</button>
@@ -925,6 +945,59 @@ const state = {
   }
 };
 
+// ---------- DEPLOY TO GITHUB ----------
+const GITHUB_REPO = 'CarSanFer/siga-aceitar';
+const GITHUB_FILE = 'index.html';
+async function deployToGitHub(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const btn = document.getElementById('btn-deploy');
+  const origText = btn.innerHTML;
+  btn.innerHTML = '⏳ A fazer deploy...';
+  btn.style.pointerEvents = 'none';
+  let token = localStorage.getItem('gh_token');
+  if (!token) {
+    token = prompt('GitHub Personal Access Token (scope: repo):');
+    if (!token) { btn.innerHTML = origText; btn.style.pointerEvents = ''; return; }
+    localStorage.setItem('gh_token', token.trim());
+  }
+  try {
+    const text = await file.text();
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const encoded = btoa(binary);
+    const getResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' }
+    });
+    const existing = getResp.ok ? await getResp.json() : null;
+    const sha = existing?.sha;
+    const putResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Deploy — ${new Date().toLocaleString('pt-PT')}`,
+        content: encoded,
+        ...(sha ? { sha } : {})
+      })
+    });
+    if (!putResp.ok) {
+      const err = await putResp.json();
+      throw new Error(err.message || 'Erro no deploy');
+    }
+    btn.innerHTML = '✅ Deployed!';
+    setTimeout(() => { btn.innerHTML = origText; btn.style.pointerEvents = ''; }, 3000);
+  } catch (e) {
+    alert('Erro no deploy: ' + e.message);
+    localStorage.removeItem('gh_token');
+    btn.innerHTML = origText;
+    btn.style.pointerEvents = '';
+  }
+}
+
 // ---------- UTILS ----------
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
@@ -939,10 +1012,11 @@ function fmtCurrency(v) {
   if (v === null || v === undefined || v === '') return '—';
   const n = Number(v);
   if (isNaN(n)) return '—';
-  return n.toLocaleString('pt-PT', {
-    style: 'currency', currency: 'EUR',
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  });
+  // Formato: 1 000,00 € (separador de milhar com espaço, decimal com vírgula)
+  const fixed = n.toFixed(2);
+  const [intPart, decPart] = fixed.split('.');
+  const intWithSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return intWithSpaces + ',' + decPart + ' €';
 }
 
 function fmtDate(v) {
@@ -1221,16 +1295,73 @@ async function importXLSX(table, mapRow) {
         showToast('Nenhum registo válido no ficheiro', 'error');
         resolve(false); return;
       }
+
+      // Pergunta modo: adicionar ou substituir
+      const mode = await askImportMode(mapped.length);
+      if (!mode) { resolve(false); return; }
+
+      if (mode === 'replace') {
+        const { error: delErr } = await sb.from(table).delete().not('id', 'is', null);
+        if (delErr) {
+          showToast('Erro a limpar: ' + delErr.message, 'error');
+          resolve(false); return;
+        }
+      }
+
       const { error } = await sb.from(table).insert(mapped);
       if (error) {
         showToast('Erro: ' + error.message, 'error');
         resolve(false); return;
       }
-      showToast('Importados ' + mapped.length + ' registos', 'success');
+      showToast(
+        (mode === 'replace' ? 'Substituído por ' : 'Adicionados ') + mapped.length + ' registos',
+        'success'
+      );
       resolve(true);
     };
     inp.click();
   });
+}
+
+function askImportMode(count) {
+  return new Promise(resolve => {
+    showModal(`
+      <div class="modal-header">
+        <div class="modal-title">Modo de importação</div>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p>O ficheiro tem <strong>${count}</strong> registos válidos.</p>
+        <p class="text-small text-muted mb">Como queres importar?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="import-cancel">Cancelar</button>
+        <button class="btn btn-secondary" id="import-add">Adicionar aos existentes</button>
+        <button class="btn btn-danger" id="import-replace">Substituir tudo</button>
+      </div>
+    `, 'sm');
+    $('#import-cancel').onclick = () => { closeModal(); resolve(null); };
+    $('#import-add').onclick = () => { closeModal(); resolve('add'); };
+    $('#import-replace').onclick = () => {
+      if (confirm('Vai eliminar TODOS os registos atuais antes de importar. Continuar?')) {
+        closeModal(); resolve('replace');
+      }
+    };
+  });
+}
+
+async function deleteAllRows(table, label, reloadKey) {
+  const n = state.data[reloadKey].length;
+  if (n === 0) { showToast('Nada para apagar', ''); return; }
+  if (!confirm('Vai eliminar TODOS os ' + n + ' registos de ' + label + '. Esta ação é irreversível. Continuar?')) return;
+  const confirmText = prompt('Para confirmar, escreve APAGAR em maiúsculas:');
+  if (confirmText !== 'APAGAR') { showToast('Cancelado', ''); return; }
+  const { error } = await sb.from(table).delete().not('id', 'is', null);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable(reloadKey);
+  if (reloadKey === 'concursos') renderConcursos();
+  else if (reloadKey === 'inspect') renderInspect();
+  showToast('Eliminados ' + n + ' registos', 'success');
 }
 
 // ---------- AI ANALYSIS ----------
@@ -1421,6 +1552,7 @@ function renderConcursos() {
         ${isAdmin() ? `
           <button class="btn btn-secondary" onclick="importConcursos()">⬆ Import XLSX</button>
           <button class="btn btn-gold" onclick="openConcursoModal()">+ Novo Concurso</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('concursos','Concursos','concursos')" title="Apagar todos os registos">🗑 Apagar tudo</button>
         ` : ''}
       </div>
     </div>
@@ -1716,7 +1848,7 @@ function renderInspect() {
     { key: 'cliente', label: 'Cliente' },
     { key: 'localizacao', label: 'Local' },
     { key: 'tipo_servico', label: 'Tipo Serviço' },
-    { key: 'data_proposta', label: 'Data' },
+    { key: 'data_proposta', label: 'Pedido' },
     { key: 'valor_sem_iva', label: 'Valor s/IVA', num: true },
     { key: 'canal_origem', label: 'Canal' },
     { key: 'estado', label: 'Estado' }
@@ -1726,7 +1858,7 @@ function renderInspect() {
     <div class="page-header">
       <div>
         <div class="page-title">Aceitar Inspect</div>
-        <div class="page-subtitle">${state.data.inspect.length} propostas · ${rows.length} visíveis</div>
+        <div class="page-subtitle">${state.data.inspect.length} pedidos · ${rows.length} visíveis</div>
       </div>
       <div class="page-actions">
         <div class="tabs">
@@ -1736,7 +1868,8 @@ function renderInspect() {
         <button class="btn btn-secondary" onclick="exportInspect()">⬇ Export XLSX</button>
         ${isAdmin() ? `
           <button class="btn btn-secondary" onclick="importInspect()">⬆ Import XLSX</button>
-          <button class="btn btn-gold" onclick="openInspectModal()">+ Nova Proposta</button>
+          <button class="btn btn-gold" onclick="openInspectModal()">+ Novo Pedido</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('inspect_propostas','Aceitar Inspect','inspect')" title="Apagar todos os registos">🗑 Apagar tudo</button>
         ` : ''}
       </div>
     </div>
@@ -1823,7 +1956,7 @@ function renderInspectAnalise() {
     <div class="page-header">
       <div>
         <div class="page-title">Aceitar Inspect — Análise</div>
-        <div class="page-subtitle">${data.length} propostas no total</div>
+        <div class="page-subtitle">${data.length} pedidos no total</div>
       </div>
       <div class="page-actions">
         <div class="tabs">
@@ -2223,7 +2356,7 @@ function openInspectModal(id) {
 
   showModal(`
     <div class="modal-header">
-      <div class="modal-title">${id ? 'Editar' : 'Nova'} Proposta</div>
+      <div class="modal-title">${id ? 'Editar' : 'Novo'} Pedido</div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
@@ -2252,7 +2385,7 @@ function openInspectModal(id) {
             <input class="form-control" name="localizacao" value="${escapeHtml(r.localizacao)}" placeholder="Cidade / Concelho">
           </div>
           <div class="form-group">
-            <label>Data da Proposta <span class="required">*</span></label>
+            <label>Data Pedido <span class="required">*</span></label>
             <input type="date" class="form-control" name="data_proposta" value="${r.data_proposta ?? ''}" required>
           </div>
         </div>
@@ -2305,7 +2438,7 @@ function openInspectModal(id) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveInspect('${id || ''}')">${id ? 'Atualizar' : 'Criar Proposta'}</button>
+      <button class="btn btn-primary" onclick="saveInspect('${id || ''}')">${id ? 'Atualizar' : 'Criar Pedido'}</button>
     </div>
   `);
 }
@@ -2316,7 +2449,7 @@ async function saveInspect(id) {
   const rec = {};
   fd.forEach((v, k) => { rec[k] = v === '' ? null : v; });
   if (!rec.cliente || !rec.data_proposta) {
-    showToast('Cliente e Data da Proposta são obrigatórios', 'error');
+    showToast('Cliente e Data Pedido são obrigatórios', 'error');
     return;
   }
   if (rec.valor_sem_iva) rec.valor_sem_iva = parseFloat(rec.valor_sem_iva);
@@ -2343,23 +2476,25 @@ async function saveInspect(id) {
     ({ error } = await sb.from('inspect_propostas').update(rec).eq('id', id));
   } else {
     rec.criado_por = null;
+    if (!rec.data_abertura) rec.data_abertura = rec.data_proposta || new Date().toISOString().slice(0,10);
+    if (!rec.estado) rec.estado = 'Em Aberto';
     ({ error } = await sb.from('inspect_propostas').insert(rec));
   }
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
   closeModal();
   await reloadTable('inspect');
   renderInspect();
-  showToast(id ? 'Proposta atualizada' : 'Proposta criada', 'success');
+  showToast(id ? 'Pedido atualizado' : 'Pedido criado', 'success');
 }
 
 function deleteInspect(id) {
   const r = state.data.inspect.find(x => x.id === id);
-  confirmAction('Eliminar a proposta de "' + (r?.cliente || '—') + '"?', async () => {
+  confirmAction('Eliminar o pedido de "' + (r?.cliente || '—') + '"?', async () => {
     const { error } = await sb.from('inspect_propostas').delete().eq('id', id);
     if (error) { showToast('Erro: ' + error.message, 'error'); return; }
     await reloadTable('inspect');
     renderInspect();
-    showToast('Proposta eliminada', 'success');
+    showToast('Pedido eliminado', 'success');
   });
 }
 
@@ -2423,7 +2558,6 @@ async function openInspectDetail(id) {
       <!-- Dados -->
       <div class="form-row mb-lg">
         <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
-        <div><label class="text-small text-muted">Data da Proposta</label><div>${fmtDate(r.data_proposta)}</div></div>
         <div><label class="text-small text-muted">Email</label><div>${escapeHtml(r.email)}</div></div>
         <div><label class="text-small text-muted">Telefone</label><div>${escapeHtml(r.telefone)}</div></div>
         <div><label class="text-small text-muted">Localização</label><div>${escapeHtml(r.localizacao)}</div></div>
@@ -2433,18 +2567,24 @@ async function openInspectDetail(id) {
         <div><label class="text-small text-muted">Canal</label><div>${escapeHtml(r.canal_origem)}</div></div>
       </div>
 
-      <!-- Datas de transição -->
-      <div class="form-row mb-lg">
-        ${r.data_abertura ? `<div><label class="text-small text-muted">Aberta em</label><div>${fmtDate(r.data_abertura)}</div></div>` : ''}
-        ${r.data_pendente ? `<div><label class="text-small text-muted">Pendente em</label><div>${fmtDate(r.data_pendente)}</div></div>` : ''}
-        ${r.data_envio ? `<div><label class="text-small text-muted">Enviada em</label><div>${fmtDate(r.data_envio)}</div></div>` : ''}
-        ${r.data_adjudicacao ? `<div><label class="text-small text-muted">Adjudicada em</label><div>${fmtDate(r.data_adjudicacao)}</div></div>` : ''}
-        ${r.data_inspecao ? `<div><label class="text-small text-muted">Inspeção</label><div><strong style="color:var(--gold-dark)">${fmtDate(r.data_inspecao)}</strong></div></div>` : ''}
-        ${r.data_realizacao ? `<div><label class="text-small text-muted">Realizada em</label><div>${fmtDate(r.data_realizacao)}</div></div>` : ''}
-        ${r.data_relatorio ? `<div><label class="text-small text-muted">Relatório em</label><div>${fmtDate(r.data_relatorio)}</div></div>` : ''}
-        ${r.data_fechado ? `<div><label class="text-small text-muted">Fechada em</label><div>${fmtDate(r.data_fechado)}</div></div>` : ''}
-        ${r.data_nao_adjudicacao ? `<div><label class="text-small text-muted">Não adjudicada em</label><div>${fmtDate(r.data_nao_adjudicacao)}</div></div>` : ''}
-        ${r.data_cancelado ? `<div><label class="text-small text-muted">Cancelada em</label><div>${fmtDate(r.data_cancelado)}</div></div>` : ''}
+      <!-- Datas de transição (sempre visíveis, vazias quando não aplicáveis) -->
+      <div class="card mb-lg">
+        <div class="card-header"><div class="card-title">Histórico de datas</div></div>
+        <div class="card-body">
+          <div class="form-row-3">
+            <div><label class="text-small text-muted">Data Pedido</label><div>${fmtDate(r.data_proposta)}</div></div>
+            <div><label class="text-small text-muted">Em Aberto</label><div>${fmtDate(r.data_abertura)}</div></div>
+            <div><label class="text-small text-muted">Pendente</label><div>${fmtDate(r.data_pendente)}</div></div>
+            <div><label class="text-small text-muted">Enviada</label><div>${fmtDate(r.data_envio)}</div></div>
+            <div><label class="text-small text-muted">Adjudicada</label><div>${fmtDate(r.data_adjudicacao)}</div></div>
+            <div><label class="text-small text-muted">Inspeção</label><div style="${r.data_inspecao ? 'color:var(--gold-dark);font-weight:600' : ''}">${fmtDate(r.data_inspecao)}</div></div>
+            <div><label class="text-small text-muted">Realizada</label><div>${fmtDate(r.data_realizacao)}</div></div>
+            <div><label class="text-small text-muted">Com Relatório</label><div>${fmtDate(r.data_relatorio)}</div></div>
+            <div><label class="text-small text-muted">Fechada</label><div>${fmtDate(r.data_fechado)}</div></div>
+            ${r.data_nao_adjudicacao ? `<div><label class="text-small text-muted">Não Adjudicada</label><div style="color:var(--danger)">${fmtDate(r.data_nao_adjudicacao)}</div></div>` : ''}
+            ${r.data_cancelado ? `<div><label class="text-small text-muted">Cancelada</label><div style="color:var(--danger)">${fmtDate(r.data_cancelado)}</div></div>` : ''}
+          </div>
+        </div>
       </div>
 
       ${r.notas ? `<div class="mb-lg"><label class="text-small text-muted">Notas</label><div style="white-space:pre-wrap;padding-top:4px;">${escapeHtml(r.notas)}</div></div>` : ''}
@@ -2478,19 +2618,6 @@ async function openInspectDetail(id) {
           </div>
         </div>
       ` : ''}
-
-      <div class="ia-panel" id="ia-panel-inspect">
-        ${r.analise_ia ? `
-          <h4>Análise IA</h4>
-          <div class="ia-content">${escapeHtml(r.analise_ia)}</div>
-          <div class="ia-meta">Gerada em ${fmtDateTime(r.analise_ia_data)}</div>
-          ${isAdmin() ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="runAnalysisInspect('${r.id}')">🔄 Regenerar</button></div>` : ''}
-        ` : `
-          <h4>Análise IA</h4>
-          <div class="text-muted text-small">Ainda não foi gerada uma análise.</div>
-          ${isAdmin() ? `<div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisInspect('${r.id}')">Gerar análise</button></div>` : ''}
-        `}
-      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
@@ -2660,7 +2787,7 @@ function exportInspect() {
     { key: 'telefone', label: 'Telefone' },
     { key: 'localizacao', label: 'Localização' },
     { key: 'morada_completa', label: 'Morada Completa' },
-    { key: 'data_proposta', label: 'Data da Proposta', format: fmtDate },
+    { key: 'data_proposta', label: 'Data Pedido', format: fmtDate },
     { key: 'tipo_servico', label: 'Tipo de Serviço' },
     { key: 'valor_sem_iva', label: 'Valor s/ IVA (€)' },
     { key: 'estado', label: 'Estado' },
@@ -2681,7 +2808,7 @@ async function importInspect() {
       telefone: row['Telefone'] || null,
       localizacao: row['Localização'] || row['Localizacao'] || null,
       morada_completa: row['Morada Completa'] || null,
-      data_proposta: parseDateValue(row['Data da Proposta']) || new Date().toISOString().slice(0,10),
+      data_proposta: parseDateValue(row['Data Pedido'] || row['Data da Proposta'] || row['Pedido']) || new Date().toISOString().slice(0,10),
       tipo_servico: row['Tipo de Serviço'] || row['Tipo de Servico'] || null,
       valor_sem_iva: row['Valor s/ IVA (€)'] || row['Valor s/ IVA'] ? parseFloat(row['Valor s/ IVA (€)'] || row['Valor s/ IVA']) : null,
       estado: CONFIG.INSPECT_ESTADOS.includes(row['Estado']) ? row['Estado'] : 'Em Aberto',
