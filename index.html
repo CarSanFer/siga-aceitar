@@ -814,7 +814,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.26-13h59</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-14h10</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -827,9 +827,9 @@
         <button class="nav-link" data-section="comunicacoes">Comunicações</button>
       </div>
       <div class="navbar-user">
-        <label class="btn btn-outline btn-sm" style="cursor:pointer" id="btn-deploy" title="Deploy para GitHub/Vercel">
+        <label class="btn btn-outline btn-sm" style="cursor:pointer" id="btn-deploy" title="Deploy para GitHub/Vercel (qualquer ficheiro)">
           🚀 Deploy
-          <input type="file" accept=".html" style="display:none" onchange="deployToGitHub(this)">
+          <input type="file" style="display:none" onchange="deployToGitHub(this)">
         </label>
         <span id="user-name"></span>
         <span id="user-badge" class="user-badge"></span>
@@ -956,13 +956,23 @@ const state = {
 
 // ---------- DEPLOY TO GITHUB ----------
 const GITHUB_REPO = 'CarSanFer/siga-aceitar';
-const GITHUB_FILE = 'index.html';
+
+// Mapeia nome do ficheiro → path no repositório
+function pathForFile(name) {
+  // Ficheiros que vão para subpastas
+  if (name === 'analisar.js') return 'api/analisar.js';
+  if (name.endsWith('.sql')) return 'migrations/' + name;
+  // Resto fica na raiz
+  return name;
+}
+
 async function deployToGitHub(input) {
   const file = input.files[0];
   if (!file) return;
+  const targetPath = pathForFile(file.name);
   const btn = document.getElementById('btn-deploy');
   const origText = btn.innerHTML;
-  btn.innerHTML = '⏳ A fazer deploy...';
+  btn.innerHTML = '⏳ ' + targetPath + '...';
   btn.style.pointerEvents = 'none';
   let token = localStorage.getItem('gh_token');
   if (!token) {
@@ -979,16 +989,16 @@ async function deployToGitHub(input) {
       binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
     }
     const encoded = btoa(binary);
-    const getResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`, {
+    const getResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${targetPath}`, {
       headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' }
     });
     const existing = getResp.ok ? await getResp.json() : null;
     const sha = existing?.sha;
-    const putResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_FILE}`, {
+    const putResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${targetPath}`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `Deploy — ${new Date().toLocaleString('pt-PT')}`,
+        message: `Deploy ${targetPath} — ${new Date().toLocaleString('pt-PT')}`,
         content: encoded,
         ...(sha ? { sha } : {})
       })
@@ -997,7 +1007,7 @@ async function deployToGitHub(input) {
       const err = await putResp.json();
       throw new Error(err.message || 'Erro no deploy');
     }
-    btn.innerHTML = '✅ Deployed!';
+    btn.innerHTML = '✅ ' + targetPath;
     setTimeout(() => { btn.innerHTML = origText; btn.style.pointerEvents = ''; }, 3000);
   } catch (e) {
     alert('Erro no deploy: ' + e.message);
