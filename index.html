@@ -476,6 +476,7 @@
     .badge-rejeitada { background: var(--danger-bg); color: var(--danger); }
     .badge-execucao { background: #fff3e0; color: #b85c00; }
     .badge-realizada { background: #fff3e0; color: #b85c00; }
+    .badge-agendada { background: #fde68a; color: #92400e; }
     .badge-comrelatorio { background: #ede9fe; color: #5b21b6; }
     .badge-concluida { background: #e8f5ec; color: var(--success); }
     .badge-fechada { background: #d1fae5; color: #065f46; }
@@ -814,7 +815,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.26-23h36</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-23h58</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -881,7 +882,7 @@ const CONFIG = {
   ],
 
   INSPECT_ESTADOS: [
-    'Em Aberto', 'Pendente', 'Enviada', 'Adjudicada', 'Não Adjudicada',
+    'Em Aberto', 'Pendente', 'Enviada', 'Adjudicada', 'Agendada', 'Não Adjudicada',
     'Realizada', 'Com Relatório', 'Fechada', 'Cancelada'
   ],
   INSPECT_TIPOS_SERVICO: [
@@ -915,13 +916,19 @@ const CONFIG = {
     'Enviada': [
       { para: 'Adjudicada', label: 'Adjudicar', dataField: 'data_adjudicacao', dataLabel: 'Data de adjudicação',
         extras: [
-          { field: 'valor_adjudicado', label: 'Valor adjudicado (€)', type: 'number', defaultFrom: 'valor_sem_iva' },
-          { field: 'data_inspecao', label: 'Data de inspeção', type: 'date' }
+          { field: 'valor_adjudicado', label: 'Valor adjudicado (€)', type: 'number', defaultFrom: 'valor_sem_iva' }
         ] },
       { para: 'Não Adjudicada', label: 'Não adjudicada', dataField: 'data_nao_adjudicacao', dataLabel: 'Data', danger: true },
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
     'Adjudicada': [
+      { para: 'Agendada', label: 'Agendar inspeção', dataField: 'data_agendada', dataLabel: 'Data de agendamento',
+        extras: [
+          { field: 'data_inspecao', label: 'Data de inspeção', type: 'date' }
+        ] },
+      { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
+    ],
+    'Agendada': [
       { para: 'Realizada', label: 'Marcar como Realizada', dataField: 'data_realizacao', dataLabel: 'Data de realização' },
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
@@ -1442,9 +1449,9 @@ function renderDashboard() {
   const propostasPendentes = i.filter(x =>
     ['Em Aberto', 'Pendente', 'Enviada'].includes(x.estado)
   ).length;
-  const propostasAceites = i.filter(x => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(x.estado)).length;
+  const propostasAceites = i.filter(x => ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(x.estado)).length;
   const valorPropostas = i
-    .filter(x => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(x.estado))
+    .filter(x => ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(x.estado))
     .reduce((s, x) => s + (Number(x.valor_sem_iva) || 0), 0);
 
   // Entregas próximas
@@ -1979,7 +1986,7 @@ function renderInspectAnalise() {
 
   // KPIs
   const totalOrcamentado = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const adjudicadosArr = data.filter(r => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado));
+  const adjudicadosArr = data.filter(r => ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado));
   const valorAdjudicado = adjudicadosArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
   const pipelineArr = data.filter(r => ['Em Aberto','Pendente','Enviada'].includes(r.estado));
   const valorPipeline = pipelineArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
@@ -2085,7 +2092,7 @@ function renderInspectAnalise() {
   const mesesLabels = [];
   const mesesData = {
     'Em Aberto': [], 'Pendente': [], 'Enviada': [],
-    'Adjudicada': [], 'Não Adjudicada': [],
+    'Adjudicada': [], 'Agendada': [], 'Não Adjudicada': [],
     'Realizada': [], 'Com Relatório': [], 'Fechada': [], 'Cancelada': []
   };
   const now = new Date();
@@ -2107,6 +2114,7 @@ function renderInspectAnalise() {
     'Pendente': '#fbbf24',
     'Enviada': '#60a5fa',
     'Adjudicada': '#34d399',
+    'Agendada': '#f59e0b',
     'Não Adjudicada': '#f87171',
     'Realizada': '#fb923c',
     'Com Relatório': '#a78bfa',
@@ -2134,7 +2142,7 @@ function renderInspectAnalise() {
   const evolLabels = [], evolTotal = [], evolAdj = [];
   sorted.forEach(r => {
     cumulativo += Number(r.valor_sem_iva) || 0;
-    if (['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado)) {
+    if (['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado)) {
       cumulativoAdj += Number(r.valor_sem_iva) || 0;
     }
     evolLabels.push(r.data_pedido);
@@ -2325,7 +2333,7 @@ async function runAnalysisInspectGlobal() {
   // Agregar dados para enviar ao Claude
   const data = state.data.inspect;
   const totalOrc = data.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
-  const adjArr = data.filter(r => ['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado));
+  const adjArr = data.filter(r => ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado));
   const valAdj = adjArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
   const pipeArr = data.filter(r => ['Em Aberto','Pendente','Enviada'].includes(r.estado));
   const valPipe = pipeArr.reduce((s, r) => s + (Number(r.valor_sem_iva) || 0), 0);
@@ -2350,7 +2358,7 @@ async function runAnalysisInspectGlobal() {
     const c = r.canal_origem || '(n/d)';
     porCanal[c] = porCanal[c] || { count: 0, aceites: 0 };
     porCanal[c].count++;
-    if (['Adjudicada','Realizada','Com Relatório','Fechada'].includes(r.estado)) porCanal[c].aceites++;
+    if (['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado)) porCanal[c].aceites++;
   });
 
   const agregados = {
@@ -2403,6 +2411,7 @@ function openInspectModal(id) {
     ['Pendente', r.data_pendente],
     ['Enviada', r.data_envio],
     ['Adjudicada', r.data_adjudicacao],
+    ['Agendada', r.data_agendada],
     ['Inspeção', r.data_inspecao],
     ['Realizada', r.data_realizacao],
     ['Com Relatório', r.data_relatorio],
@@ -2498,10 +2507,64 @@ function openInspectModal(id) {
           <textarea class="form-control" name="notas" rows="3" style="min-height:80px">${escapeHtml(r.notas)}</textarea>
         </div>
 
-        <!-- Campos ocultos: valor é definido só na transição "Enviada" -->
-        <input type="hidden" name="valor_sem_iva" value="${r.valor_sem_iva ?? ''}">
+        <!-- Valores e datas de transição: editáveis em qualquer estado -->
+        <div style="margin-top:24px;border-top:1px solid var(--border-light);padding-top:16px">
+          <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Valores e datas (avançado)</label>
 
-        ${histHTML}
+          <div class="form-row">
+            <div class="form-group">
+              <label>Valor s/ IVA (€)</label>
+              <input type="number" step="0.01" class="form-control" name="valor_sem_iva" value="${r.valor_sem_iva ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Valor Adjudicado (€)</label>
+              <input type="number" step="0.01" class="form-control" name="valor_adjudicado" value="${r.valor_adjudicado ?? ''}">
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Data Pendente</label>
+              <input type="date" class="form-control" name="data_pendente" value="${r.data_pendente ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Envio</label>
+              <input type="date" class="form-control" name="data_envio" value="${r.data_envio ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Adjudicação</label>
+              <input type="date" class="form-control" name="data_adjudicacao" value="${r.data_adjudicacao ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Agendada</label>
+              <input type="date" class="form-control" name="data_agendada" value="${r.data_agendada ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Inspeção</label>
+              <input type="date" class="form-control" name="data_inspecao" value="${r.data_inspecao ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Realização</label>
+              <input type="date" class="form-control" name="data_realizacao" value="${r.data_realizacao ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Relatório</label>
+              <input type="date" class="form-control" name="data_relatorio" value="${r.data_relatorio ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Fechada</label>
+              <input type="date" class="form-control" name="data_fechado" value="${r.data_fechado ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Não Adjudicada</label>
+              <input type="date" class="form-control" name="data_nao_adjudicacao" value="${r.data_nao_adjudicacao ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Data Cancelamento</label>
+              <input type="date" class="form-control" name="data_cancelado" value="${r.data_cancelado ?? ''}">
+            </div>
+          </div>
+        </div>
       </form>
     </div>
     <div class="modal-footer">
@@ -2521,6 +2584,7 @@ async function saveInspect(id) {
     return;
   }
   if (rec.valor_sem_iva) rec.valor_sem_iva = parseFloat(rec.valor_sem_iva);
+  if (rec.valor_adjudicado) rec.valor_adjudicado = parseFloat(rec.valor_adjudicado);
 
   // Auto-geocode if editing with changed address or creating new with address
   const existing = id ? state.data.inspect.find(x => x.id === id) : null;
@@ -2582,7 +2646,7 @@ async function openInspectDetail(id) {
   const mostraAnexos = podeAnexarGenerico || podeAnexarRelatorio || (anexos && anexos.length > 0);
 
   // Workflow stepper
-  const ordemEstados = ['Em Aberto','Pendente','Enviada','Adjudicada','Realizada','Com Relatório','Fechada'];
+  const ordemEstados = ['Em Aberto','Pendente','Enviada','Adjudicada','Agendada','Realizada','Com Relatório','Fechada'];
   const isCancelado = r.estado === 'Cancelada';
   const isNaoAdj = r.estado === 'Não Adjudicada';
   const idxAtual = ordemEstados.indexOf(r.estado);
@@ -2646,6 +2710,7 @@ async function openInspectDetail(id) {
             <div><label class="text-small text-muted">Pendente</label><div>${fmtDate(r.data_pendente)}</div></div>
             <div><label class="text-small text-muted">Enviada</label><div>${fmtDate(r.data_envio)}</div></div>
             <div><label class="text-small text-muted">Adjudicada</label><div>${fmtDate(r.data_adjudicacao)}</div></div>
+            <div><label class="text-small text-muted">Agendada</label><div>${fmtDate(r.data_agendada)}</div></div>
             <div><label class="text-small text-muted">Inspeção</label><div style="${r.data_inspecao ? 'color:var(--gold-dark);font-weight:600' : ''}">${fmtDate(r.data_inspecao)}</div></div>
             <div><label class="text-small text-muted">Realizada</label><div>${fmtDate(r.data_realizacao)}</div></div>
             <div><label class="text-small text-muted">Com Relatório</label><div>${fmtDate(r.data_relatorio)}</div></div>
@@ -2718,14 +2783,14 @@ function openTransitionModal(id, transicao) {
       return `
         <div class="form-group">
           <label>${ex.label} <span class="required">*</span></label>
-          <input type="number" step="0.01" class="form-control" id="extra-${i}" ${valAttr} placeholder="0,00" required>
+          <input type="number" step="0.01" class="form-control" id="extra-${i}" ${valAttr} placeholder="0,00">
         </div>`;
     }
     // date (default)
     return `
       <div class="form-group">
         <label>${ex.label} <span class="required">*</span></label>
-        <input type="date" class="form-control" id="extra-${i}" value="${today}" required>
+        <input type="date" class="form-control" id="extra-${i}" value="${today}">
       </div>`;
   }).join('');
 
@@ -2735,11 +2800,13 @@ function openTransitionModal(id, transicao) {
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
+      <form id="transition-form" onsubmit="event.preventDefault(); return false;">
       <div class="form-group">
         <label>${transicao.dataLabel} <span class="required">*</span></label>
-        <input type="date" class="form-control" id="transition-date" value="${today}" required>
+        <input type="date" class="form-control" id="transition-date" value="${today}">
       </div>
       ${extrasHTML}
+      </form>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
