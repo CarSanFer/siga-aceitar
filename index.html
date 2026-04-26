@@ -814,7 +814,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.26-21h30</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-21h49</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -897,15 +897,24 @@ const CONFIG = {
   INSPECT_WORKFLOW: {
     'Em Aberto': [
       { para: 'Pendente', label: 'Marcar como Pendente', dataField: 'data_pendente', dataLabel: 'Data' },
-      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio', extra: { field: 'valor_sem_iva', label: 'Valor s/ IVA (€)', type: 'number' } },
+      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio',
+        extras: [
+          { field: 'valor_sem_iva', label: 'Valor s/ IVA (€)', type: 'number' },
+          { field: '_anexo_proposta', label: 'Anexar proposta', type: 'file' }
+        ] },
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
     'Pendente': [
-      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio', extra: { field: 'valor_sem_iva', label: 'Valor s/ IVA (€)', type: 'number' } },
+      { para: 'Enviada', label: 'Marcar como Enviada', dataField: 'data_envio', dataLabel: 'Data de envio',
+        extras: [
+          { field: 'valor_sem_iva', label: 'Valor s/ IVA (€)', type: 'number' },
+          { field: '_anexo_proposta', label: 'Anexar proposta', type: 'file' }
+        ] },
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
     'Enviada': [
-      { para: 'Adjudicada', label: 'Adjudicar', dataField: 'data_adjudicacao', dataLabel: 'Data de adjudicação', extra: { field: 'data_inspecao', label: 'Data de inspeção' } },
+      { para: 'Adjudicada', label: 'Adjudicar', dataField: 'data_adjudicacao', dataLabel: 'Data de adjudicação',
+        extras: [{ field: 'data_inspecao', label: 'Data de inspeção', type: 'date' }] },
       { para: 'Não Adjudicada', label: 'Não adjudicada', dataField: 'data_nao_adjudicacao', dataLabel: 'Data', danger: true },
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
@@ -2566,7 +2575,7 @@ async function openInspectDetail(id) {
   const transicoesPossiveis = CONFIG.INSPECT_WORKFLOW[r.estado] || [];
 
   // Anexos visíveis em: Em Aberto, Pendente, Adjudicada (e Com Relatório para o relatório)
-  const podeAnexarGenerico = ['Em Aberto', 'Pendente', 'Adjudicada'].includes(r.estado);
+  const podeAnexarGenerico = ['Em Aberto', 'Pendente', 'Enviada', 'Adjudicada'].includes(r.estado);
   const podeAnexarRelatorio = r.estado === 'Com Relatório';
   const mostraAnexos = podeAnexarGenerico || podeAnexarRelatorio || (anexos && anexos.length > 0);
 
@@ -2688,15 +2697,33 @@ async function openInspectDetail(id) {
 // ---------- WORKFLOW TRANSITIONS ----------
 function openTransitionModal(id, transicao) {
   const today = new Date().toISOString().slice(0,10);
-  const extraType = transicao.extra?.type === 'number' ? 'number' : 'date';
-  const extraStep = extraType === 'number' ? 'step="0.01"' : '';
-  const extraDefault = extraType === 'number' ? '' : today;
-  const extraField = transicao.extra ? `
-    <div class="form-group">
-      <label>${transicao.extra.label} <span class="required">*</span></label>
-      <input type="${extraType}" ${extraStep} class="form-control" id="extra-value" value="${extraDefault}" placeholder="${extraType === 'number' ? '0,00' : ''}" required>
-    </div>
-  ` : '';
+
+  // Suporte para formato antigo (extra) e novo (extras)
+  const extras = transicao.extras || (transicao.extra ? [transicao.extra] : []);
+
+  const extrasHTML = extras.map((ex, i) => {
+    if (ex.type === 'file') {
+      return `
+        <div class="form-group">
+          <label>${ex.label}</label>
+          <input type="file" class="form-control" id="extra-${i}" style="padding:6px">
+          <div class="text-small text-muted" style="margin-top:4px">Opcional. Máx 25 MB.</div>
+        </div>`;
+    }
+    if (ex.type === 'number') {
+      return `
+        <div class="form-group">
+          <label>${ex.label} <span class="required">*</span></label>
+          <input type="number" step="0.01" class="form-control" id="extra-${i}" placeholder="0,00" required>
+        </div>`;
+    }
+    // date (default)
+    return `
+      <div class="form-group">
+        <label>${ex.label} <span class="required">*</span></label>
+        <input type="date" class="form-control" id="extra-${i}" value="${today}" required>
+      </div>`;
+  }).join('');
 
   showModal(`
     <div class="modal-header">
@@ -2708,7 +2735,7 @@ function openTransitionModal(id, transicao) {
         <label>${transicao.dataLabel} <span class="required">*</span></label>
         <input type="date" class="form-control" id="transition-date" value="${today}" required>
       </div>
-      ${extraField}
+      ${extrasHTML}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -2725,14 +2752,64 @@ function openTransitionModal(id, transicao) {
       [transicao.dataField]: dateValue
     };
 
-    if (transicao.extra) {
-      const raw = $('#extra-value').value;
-      if (!raw) { showToast(transicao.extra.label + ' obrigatório', 'error'); return; }
-      update[transicao.extra.field] = transicao.extra.type === 'number' ? parseFloat(raw) : raw;
+    // Recolher extras (exceto files, que são tratados separadamente)
+    const filesToUpload = [];
+    for (let i = 0; i < extras.length; i++) {
+      const ex = extras[i];
+      const el = $('#extra-' + i);
+      if (ex.type === 'file') {
+        if (el.files && el.files[0]) {
+          if (el.files[0].size > 25 * 1024 * 1024) {
+            showToast('Ficheiro demasiado grande (máx 25 MB)', 'error');
+            return;
+          }
+          filesToUpload.push({ field: ex.field, file: el.files[0], label: ex.label });
+        }
+        // Se não há ficheiro, apenas não adiciona — é opcional
+      } else if (ex.type === 'number') {
+        const raw = el.value;
+        if (!raw) { showToast(ex.label + ' obrigatório', 'error'); return; }
+        update[ex.field] = parseFloat(raw);
+      } else {
+        const raw = el.value;
+        if (!raw) { showToast(ex.label + ' obrigatória', 'error'); return; }
+        update[ex.field] = raw;
+      }
     }
 
+    // 1. Atualiza estado/dados na BD
+    const btn = $('#confirm-transition');
+    btn.disabled = true;
+    btn.textContent = 'A guardar...';
     const { error } = await sb.from('inspect_pedidos').update(update).eq('id', id);
-    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    if (error) { showToast('Erro: ' + error.message, 'error'); btn.disabled = false; btn.textContent = 'Confirmar'; return; }
+
+    // 2. Faz upload dos ficheiros
+    for (const item of filesToUpload) {
+      btn.textContent = 'A enviar ' + item.file.name + '...';
+      const path = id + '/' + Date.now() + '_' + item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error: upErr } = await sb.storage.from('inspect-anexos').upload(path, item.file, {
+        contentType: item.file.type,
+        upsert: false
+      });
+      if (upErr) {
+        showToast('Aviso: anexo "' + item.file.name + '" falhou: ' + upErr.message, 'error');
+        continue;
+      }
+      const { error: dbErr } = await sb.from('inspect_anexos').insert({
+        pedido_id: id,
+        tipo: 'generico',
+        nome: item.file.name,
+        storage_path: path,
+        tamanho_bytes: item.file.size,
+        mime_type: item.file.type
+      });
+      if (dbErr) {
+        await sb.storage.from('inspect-anexos').remove([path]);
+        showToast('Aviso: BD do anexo falhou: ' + dbErr.message, 'error');
+      }
+    }
+
     closeModal();
     await reloadTable('inspect');
     renderInspect();
