@@ -216,7 +216,7 @@
     }
     .navbar-brand {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       gap: 10px;
       font-weight: 700;
       font-size: 18px;
@@ -227,10 +227,16 @@
       font-size: 22px;
       line-height: 0;
     }
+    .navbar-brand .brand-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      line-height: 1.1;
+    }
     .navbar-brand .subtitle {
       font-size: 10px;
       font-weight: 400;
-      color: rgba(255,255,255,0.6);
+      color: rgba(255,255,255,0.7);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -276,9 +282,10 @@
     .user-badge.leitor { background: rgba(255,255,255,0.15); color: white; }
     .app-version {
       font-size: 10px;
-      color: rgba(255,255,255,0.5);
+      color: var(--gold-light);
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.3px;
+      font-weight: 600;
     }
     .btn-outline {
       background: transparent;
@@ -805,7 +812,10 @@
       <div class="navbar-brand">
         <span>SIGA</span>
         <span class="dot">●</span>
-        <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
+        <div class="brand-meta">
+          <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-13h59</span>
+        </div>
       </div>
       <div class="navbar-links" id="navbar-links">
         <button class="nav-link active" data-section="dashboard">Dashboard</button>
@@ -817,7 +827,6 @@
         <button class="nav-link" data-section="comunicacoes">Comunicações</button>
       </div>
       <div class="navbar-user">
-        <span class="app-version" title="Versão da aplicação">v2026.04.26-10h59</span>
         <label class="btn btn-outline btn-sm" style="cursor:pointer" id="btn-deploy" title="Deploy para GitHub/Vercel">
           🚀 Deploy
           <input type="file" accept=".html" style="display:none" onchange="deployToGitHub(this)">
