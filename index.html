@@ -814,7 +814,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.26-17h14</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-17h30</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -959,11 +959,14 @@ const GITHUB_REPO = 'CarSanFer/siga-aceitar';
 
 // Mapeia nome do ficheiro → path no repositório
 function pathForFile(name) {
+  // Remove sufixos do tipo " (1)", " (2)" que o browser adiciona em downloads repetidos
+  // Ex: "index (3).html" → "index.html", "vercel (1).json" → "vercel.json"
+  let clean = name.replace(/\s*\(\d+\)(?=\.[^.]+$)/, '');
   // Ficheiros que vão para subpastas
-  if (name === 'analisar.js') return 'api/analisar.js';
-  if (name.endsWith('.sql')) return 'migrations/' + name;
+  if (clean === 'analisar.js') return 'api/analisar.js';
+  if (clean.endsWith('.sql')) return 'migrations/' + clean;
   // Resto fica na raiz
-  return name;
+  return clean;
 }
 
 async function deployToGitHub(input) {
