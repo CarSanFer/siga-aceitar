@@ -814,7 +814,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.26-17h30</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.26-18h17</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1876,6 +1876,7 @@ function renderInspect() {
 
   const cols = [
     { key: 'id_pedido', label: 'ID' },
+    { key: 'data_pedido', label: 'Data Pedido' },
     { key: 'cliente', label: 'Cliente' },
     { key: 'localizacao', label: 'Localização' },
     { key: 'telefone', label: 'Telemóvel' },
@@ -1930,6 +1931,7 @@ function renderInspect() {
               : rows.map(r => `
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
                   <td>${escapeHtml(r.id_pedido)}</td>
+                  <td>${fmtDate(r.data_pedido)}</td>
                   <td><strong>${escapeHtml(r.cliente)}</strong></td>
                   <td>${escapeHtml(r.localizacao)}</td>
                   <td>${escapeHtml(r.telefone)}</td>
