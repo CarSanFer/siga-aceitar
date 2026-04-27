@@ -815,7 +815,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.27-00h23</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.27-00h26</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -3025,19 +3025,31 @@ function exportInspect() {
     ['id_pedido','cliente','email','telefone','localizacao','tipo_servico']);
   exportXLSX(rows, [
     { key: 'id_pedido', label: 'ID' },
+    { key: 'data_pedido', label: 'Data Pedido', format: fmtDate },
+    { key: 'estado', label: 'Estado' },
     { key: 'cliente', label: 'Cliente' },
-    { key: 'email', label: 'Email' },
     { key: 'telefone', label: 'Telemóvel' },
+    { key: 'email', label: 'Email' },
     { key: 'localizacao', label: 'Localização' },
     { key: 'morada', label: 'Morada' },
-    { key: 'data_pedido', label: 'Data Pedido', format: fmtDate },
     { key: 'tipo_servico', label: 'Tipo de Serviço' },
-    { key: 'valor_sem_iva', label: 'Valor s/ IVA (€)' },
-    { key: 'estado', label: 'Estado' },
     { key: 'canal_origem', label: 'Canal de Origem' },
+    { key: 'valor_sem_iva', label: 'Valor s/ IVA (€)' },
+    { key: 'valor_adjudicado', label: 'Valor Adjudicado (€)' },
+    { key: 'data_pendente', label: 'Data Pendente', format: fmtDate },
+    { key: 'data_envio', label: 'Data Envio', format: fmtDate },
+    { key: 'data_adjudicacao', label: 'Data Adjudicação', format: fmtDate },
+    { key: 'data_agendada', label: 'Data Agendada', format: fmtDate },
+    { key: 'data_inspecao', label: 'Data Inspeção', format: fmtDate },
+    { key: 'data_realizacao', label: 'Data Realização', format: fmtDate },
+    { key: 'data_relatorio', label: 'Data Relatório', format: fmtDate },
+    { key: 'data_fechado', label: 'Data Fechada', format: fmtDate },
+    { key: 'data_nao_adjudicacao', label: 'Data Não Adjudicada', format: fmtDate },
+    { key: 'motivo_nao_adjudicacao', label: 'Motivo Não Adjudicada' },
+    { key: 'data_cancelado', label: 'Data Cancelamento', format: fmtDate },
     { key: 'notas', label: 'Notas' },
-    { key: 'data_envio', label: 'Data de Envio', format: fmtDate },
-    { key: 'data_adjudicacao', label: 'Data de Adjudicação', format: fmtDate }
+    { key: 'created_at', label: 'Criado em', format: fmtDateTime },
+    { key: 'updated_at', label: 'Atualizado em', format: fmtDateTime }
   ], 'siga_inspect_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
@@ -3046,19 +3058,29 @@ async function importInspect() {
     if (!row['Cliente']) return null;
     return {
       id_pedido: row['ID'] || null,
+      data_pedido: parseDateValue(row['Data Pedido'] || row['Data da Proposta'] || row['Pedido']) || new Date().toISOString().slice(0,10),
+      estado: CONFIG.INSPECT_ESTADOS.includes(row['Estado']) ? row['Estado'] : 'Em Aberto',
       cliente: row['Cliente'],
-      email: row['Email'] || null,
       telefone: row['Telemóvel'] || row['Telemovel'] || row['Telefone'] || null,
+      email: row['Email'] || null,
       localizacao: row['Localização'] || row['Localizacao'] || null,
       morada: row['Morada'] || row['Morada Completa'] || null,
-      data_pedido: parseDateValue(row['Data Pedido'] || row['Data da Proposta'] || row['Pedido']) || new Date().toISOString().slice(0,10),
       tipo_servico: row['Tipo de Serviço'] || row['Tipo de Servico'] || null,
-      valor_sem_iva: row['Valor s/ IVA (€)'] || row['Valor s/ IVA'] ? parseFloat(row['Valor s/ IVA (€)'] || row['Valor s/ IVA']) : null,
-      estado: CONFIG.INSPECT_ESTADOS.includes(row['Estado']) ? row['Estado'] : 'Em Aberto',
       canal_origem: row['Canal de Origem'] || null,
-      notas: row['Notas'] || null,
-      data_envio: parseDateValue(row['Data de Envio']),
-      data_adjudicacao: parseDateValue(row['Data de Adjudicação'] || row['Data de Adjudicacao'])
+      valor_sem_iva: (row['Valor s/ IVA (€)'] || row['Valor s/ IVA']) ? parseFloat(row['Valor s/ IVA (€)'] || row['Valor s/ IVA']) : null,
+      valor_adjudicado: (row['Valor Adjudicado (€)'] || row['Valor Adjudicado']) ? parseFloat(row['Valor Adjudicado (€)'] || row['Valor Adjudicado']) : null,
+      data_pendente: parseDateValue(row['Data Pendente']),
+      data_envio: parseDateValue(row['Data Envio'] || row['Data de Envio']),
+      data_adjudicacao: parseDateValue(row['Data Adjudicação'] || row['Data de Adjudicação'] || row['Data de Adjudicacao']),
+      data_agendada: parseDateValue(row['Data Agendada']),
+      data_inspecao: parseDateValue(row['Data Inspeção'] || row['Data Inspecao']),
+      data_realizacao: parseDateValue(row['Data Realização'] || row['Data Realizacao']),
+      data_relatorio: parseDateValue(row['Data Relatório'] || row['Data Relatorio']),
+      data_fechado: parseDateValue(row['Data Fechada'] || row['Data Fecho']),
+      data_nao_adjudicacao: parseDateValue(row['Data Não Adjudicada'] || row['Data Nao Adjudicada']),
+      motivo_nao_adjudicacao: row['Motivo Não Adjudicada'] || row['Motivo Nao Adjudicada'] || null,
+      data_cancelado: parseDateValue(row['Data Cancelamento'] || row['Data Cancelado']),
+      notas: row['Notas'] || null
     };
   });
   if (ok) { await reloadTable('inspect'); renderInspect(); }
