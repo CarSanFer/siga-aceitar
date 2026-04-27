@@ -815,7 +815,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.27-00h08</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.27-00h23</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -933,7 +933,10 @@ const CONFIG = {
       { para: 'Cancelada', label: 'Cancelar', dataField: 'data_cancelado', dataLabel: 'Data de cancelamento', danger: true }
     ],
     'Realizada': [
-      { para: 'Com Relatório', label: 'Marcar Com Relatório', dataField: 'data_relatorio', dataLabel: 'Data do relatório' }
+      { para: 'Com Relatório', label: 'Marcar Com Relatório', dataField: 'data_relatorio', dataLabel: 'Data do relatório',
+        extras: [
+          { field: '_anexo_relatorio', label: 'Anexar relatório', type: 'file', tipoAnexo: 'relatorio' }
+        ] }
     ],
     'Com Relatório': [
       { para: 'Fechada', label: 'Fechar', dataField: 'data_fechado', dataLabel: 'Data de fecho' }
@@ -2862,7 +2865,7 @@ function openTransitionModal(id, transicao) {
             showToast('Ficheiro demasiado grande (máx 25 MB)', 'error');
             return;
           }
-          filesToUpload.push({ field: ex.field, file: el.files[0], label: ex.label });
+          filesToUpload.push({ field: ex.field, file: el.files[0], label: ex.label, tipoAnexo: ex.tipoAnexo || 'generico' });
         }
         // Se não há ficheiro, apenas não adiciona — é opcional
       } else if (ex.type === 'number') {
@@ -2899,7 +2902,7 @@ function openTransitionModal(id, transicao) {
       }
       const { error: dbErr } = await sb.from('inspect_anexos').insert({
         pedido_id: id,
-        tipo: 'generico',
+        tipo: item.tipoAnexo || 'generico',
         nome: item.file.name,
         storage_path: path,
         tamanho_bytes: item.file.size,
