@@ -279,6 +279,7 @@
       letter-spacing: 0.3px;
     }
     .user-badge.superadmin { background: var(--gold); color: var(--navy-dark); }
+    .user-badge.editor { background: #c9a24a; color: var(--navy-dark); }
     .user-badge.leitor { background: rgba(255,255,255,0.15); color: white; }
     .app-version {
       font-size: 10px;
@@ -815,7 +816,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.27-00h26</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.28-10h16</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1175,6 +1176,9 @@ function confirmAction(msg, onConfirm) {
 
 function isAdmin() {
   return state.userRole === 'superadmin';
+}
+function canEdit() {
+  return state.userRole === 'superadmin' || state.userRole === 'editor';
 }
 
 // ---------- AUTH ----------
@@ -1602,9 +1606,11 @@ function renderConcursos() {
       </div>
       <div class="page-actions">
         <button class="btn btn-secondary" onclick="exportConcursos()">⬇ Export XLSX</button>
-        ${isAdmin() ? `
+        ${canEdit() ? `
           <button class="btn btn-secondary" onclick="importConcursos()">⬆ Import XLSX</button>
           <button class="btn btn-gold" onclick="openConcursoModal()">+ Novo Concurso</button>
+        ` : ''}
+        ${isAdmin() ? `
           <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('concursos','Concursos','concursos')" title="Apagar todos os registos">🗑 Apagar tudo</button>
         ` : ''}
       </div>
@@ -1646,8 +1652,10 @@ function renderConcursos() {
                   <td>${badge(r.status)}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
-                      ${isAdmin() ? `
+                      ${canEdit() ? `
                         <button class="btn btn-ghost btn-sm" onclick="openConcursoModal('${r.id}')" title="Editar">✎</button>
+                      ` : ''}
+                      ${isAdmin() ? `
                         <button class="btn btn-ghost btn-sm" onclick="deleteConcurso('${r.id}')" title="Eliminar" style="color:var(--danger)">🗑</button>
                       ` : ''}
                     </div>
@@ -1803,17 +1811,17 @@ function openConcursoDetail(id) {
           <h4>Análise IA</h4>
           <div class="ia-content">${escapeHtml(r.analise_ia)}</div>
           <div class="ia-meta">Gerada em ${fmtDateTime(r.analise_ia_data)}</div>
-          ${isAdmin() ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="runAnalysisConcurso('${r.id}')">🔄 Regenerar</button></div>` : ''}
+          ${canEdit() ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="runAnalysisConcurso('${r.id}')">🔄 Regenerar</button></div>` : ''}
         ` : `
           <h4>Análise IA</h4>
           <div class="text-muted text-small">Ainda não foi gerada uma análise para este concurso.</div>
-          ${isAdmin() ? `<div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisConcurso('${r.id}')">Gerar análise</button></div>` : ''}
+          ${canEdit() ? `<div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisConcurso('${r.id}')">Gerar análise</button></div>` : ''}
         `}
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
-      ${isAdmin() ? `<button class="btn btn-primary" onclick="closeModal(); openConcursoModal('${r.id}')">Editar</button>` : ''}
+      ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openConcursoModal('${r.id}')">Editar</button>` : ''}
     </div>
   `);
 }
@@ -1918,9 +1926,11 @@ function renderInspect() {
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
         <button class="btn btn-secondary" onclick="exportInspect()">⬇ Export XLSX</button>
-        ${isAdmin() ? `
+        ${canEdit() ? `
           <button class="btn btn-secondary" onclick="importInspect()">⬆ Import XLSX</button>
           <button class="btn btn-gold" onclick="openInspectModal()">+ Novo Pedido</button>
+        ` : ''}
+        ${isAdmin() ? `
           <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('inspect_pedidos','Aceitar Inspect','inspect')" title="Apagar todos os registos">🗑 Apagar tudo</button>
         ` : ''}
       </div>
@@ -1961,8 +1971,10 @@ function renderInspect() {
                   <td>${badge(r.estado)}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
-                      ${isAdmin() ? `
+                      ${canEdit() ? `
                         <button class="btn btn-ghost btn-sm" onclick="openInspectModal('${r.id}')" title="Editar">✎</button>
+                      ` : ''}
+                      ${isAdmin() ? `
                         <button class="btn btn-ghost btn-sm" onclick="deleteInspect('${r.id}')" title="Eliminar" style="color:var(--danger)">🗑</button>
                       ` : ''}
                     </div>
@@ -2014,12 +2026,12 @@ function renderInspectAnalise() {
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
           <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
         </div>
-        ${isAdmin() && semCoords > 0 ? `
+        ${canEdit() && semCoords > 0 ? `
           <button class="btn btn-secondary" onclick="geocodeAllInspect()" title="Geocodificar ${semCoords} registos sem coordenadas">
             📍 Geocodificar (${semCoords})
           </button>
         ` : ''}
-        ${isAdmin() ? `
+        ${canEdit() ? `
           <button class="btn btn-gold" onclick="runAnalysisInspectGlobal()">✨ Insights IA</button>
         ` : ''}
       </div>
@@ -2688,7 +2700,7 @@ async function openInspectDetail(id) {
         ${!isCancelado && !isNaoAdj ? stepperHTML : ''}
       </div>
 
-      ${isAdmin() && transicoesPossiveis.length > 0 ? `
+      ${canEdit() && transicoesPossiveis.length > 0 ? `
         <div class="workflow-actions">
           ${transicoesPossiveis.map(t => `
             <button class="btn ${t.danger ? 'btn-secondary' : 'btn-primary'} btn-sm"
@@ -2740,7 +2752,7 @@ async function openInspectDetail(id) {
         <div class="card mb-lg">
           <div class="card-header">
             <div class="card-title">Anexos${anexos && anexos.length ? ` (${anexos.length})` : ''}</div>
-            ${isAdmin() ? `
+            ${canEdit() ? `
               <div class="flex gap-sm">
                 ${podeAnexarGenerico ? `<button class="btn btn-secondary btn-sm" onclick="uploadAnexo('${id}', 'generico')">+ Adicionar</button>` : ''}
                 ${podeAnexarRelatorio ? `<button class="btn btn-gold btn-sm" onclick="uploadAnexo('${id}', 'relatorio')">+ Adicionar Relatório</button>` : ''}
@@ -2768,7 +2780,7 @@ async function openInspectDetail(id) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
-      ${isAdmin() ? `<button class="btn btn-primary" onclick="closeModal(); openInspectModal('${r.id}')">Editar</button>` : ''}
+      ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openInspectModal('${r.id}')">Editar</button>` : ''}
     </div>
   `, 'lg');
 }
