@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <style>
     :root {
       --navy: #1a3a5c;
@@ -816,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.28-10h16</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h24</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -895,6 +896,13 @@ const CONFIG = {
     'Email direto', 'Cliente recorrente', 'Outro'
   ],
 
+  // EmailJS — notificações ao financeiro
+  EMAILJS: {
+    PUBLIC_KEY: 'BiTbyfz5BTSKgyq0P',
+    SERVICE_ID: 'service_2u3z5y5',
+    TEMPLATE_ID: 'template_qd5bexj'
+  },
+
   // Workflow: { de: [{ para, label, dataField, dataLabel, extra? }] }
   INSPECT_WORKFLOW: {
     'Em Aberto': [
@@ -917,8 +925,10 @@ const CONFIG = {
     'Enviada': [
       { para: 'Adjudicada', label: 'Adjudicar', dataField: 'data_adjudicacao', dataLabel: 'Data de adjudicação',
         extras: [
-          { field: 'valor_adjudicado', label: 'Valor adjudicado (€)', type: 'number', defaultFrom: 'valor_sem_iva' }
-        ] },
+          { field: 'valor_adjudicado', label: 'Valor adjudicado (€)', type: 'number', defaultFrom: 'valor_sem_iva' },
+          { field: 'fat1_valor', label: 'Tranche 1 — Adjudicação (€)', type: 'number', defaultPercent: { from: 'valor_adjudicado_input', percent: 50 } }
+        ],
+        notify: 'Adjudicação Efetuada' },
       { para: 'Não Adjudicada', label: 'Não adjudicada', dataField: 'data_nao_adjudicacao', dataLabel: 'Data', danger: true,
         extras: [
           { field: 'motivo_nao_adjudicacao', label: 'Motivo', type: 'select', options: ['Preço', 'Prazo', 'Concorrência', 'Sem feedback', 'Outro'] }
@@ -936,8 +946,10 @@ const CONFIG = {
     'Realizada': [
       { para: 'Com Relatório', label: 'Marcar Com Relatório', dataField: 'data_relatorio', dataLabel: 'Data do relatório',
         extras: [
+          { field: 'fat2_valor', label: 'Tranche 2 — Relatório (€)', type: 'number', defaultPercent: { from: 'valor_adjudicado', percent: 50 } },
           { field: '_anexo_relatorio', label: 'Anexar relatório', type: 'file', tipoAnexo: 'relatorio' }
-        ] }
+        ],
+        notify: 'Relatório Entregue' }
     ],
     'Com Relatório': [
       { para: 'Fechada', label: 'Fechar', dataField: 'data_fechado', dataLabel: 'Data de fecho' }
@@ -1890,6 +1902,10 @@ function renderInspect() {
     renderInspectAnalise();
     return;
   }
+  if (state.inspectView === 'financeiro') {
+    renderInspectFinanceiro();
+    return;
+  }
 
   const { search, estado } = state.filters.inspect;
   const { key, dir } = state.sort.inspect;
@@ -1923,6 +1939,7 @@ function renderInspect() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn active" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
         <button class="btn btn-secondary" onclick="exportInspect()">⬇ Export XLSX</button>
@@ -1994,6 +2011,201 @@ function switchInspectView(view) {
 }
 
 // ============================================================
+// ACEITAR INSPECT — VISTA FINANCEIRO
+// ============================================================
+function renderInspectFinanceiro() {
+  // Pedidos relevantes: Adjudicada em diante
+  const data = state.data.inspect.filter(r =>
+    ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado)
+  );
+
+  // Construir linhas de faturação (cada pedido pode ter 1 ou 2 linhas, conforme estado)
+  const linhas = [];
+  data.forEach(r => {
+    // Tranche 1 — sempre que está adjudicado
+    linhas.push({
+      pedido: r,
+      tranche: 1,
+      label: 'T1 — Adjudicação',
+      valor: r.fat1_valor,
+      enviada: r.fat1_enviada,
+      pago: r.fat1_pago
+    });
+    // Tranche 2 — só quando passou para Com Relatório ou Fechada
+    if (['Com Relatório','Fechada'].includes(r.estado)) {
+      linhas.push({
+        pedido: r,
+        tranche: 2,
+        label: 'T2 — Relatório',
+        valor: r.fat2_valor,
+        enviada: r.fat2_enviada,
+        pago: r.fat2_pago
+      });
+    }
+  });
+
+  // KPIs
+  const totalAFaturar = linhas.filter(l => !l.enviada).reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  const totalFaturado = linhas.filter(l => l.enviada).reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  const totalPorReceber = linhas.filter(l => l.enviada && !l.pago).reduce((s, l) => s + (Number(l.valor) || 0), 0);
+  const totalRecebido = linhas.filter(l => l.pago).reduce((s, l) => s + (Number(l.valor) || 0), 0);
+
+  // Filtros simples
+  const filtro = state.filters.financeiro || (state.filters.financeiro = { estado: '' });
+  let linhasView = linhas;
+  if (filtro.estado === 'por_faturar') linhasView = linhas.filter(l => !l.enviada);
+  else if (filtro.estado === 'faturado_por_pagar') linhasView = linhas.filter(l => l.enviada && !l.pago);
+  else if (filtro.estado === 'pago') linhasView = linhas.filter(l => l.pago);
+
+  $('#section-inspect').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Aceitar Inspect — Financeiro</div>
+        <div class="page-subtitle">${linhas.length} tranches · ${linhasView.length} visíveis</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchInspectView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
+        </div>
+        <button class="btn btn-secondary" onclick="exportFinanceiro()">⬇ Export XLSX</button>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Por faturar</div>
+        <div class="kpi-value" style="color:var(--warning)">${fmtCurrency(totalAFaturar)}</div>
+        <div class="kpi-sub">${linhas.filter(l => !l.enviada).length} tranches</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Faturado</div>
+        <div class="kpi-value">${fmtCurrency(totalFaturado)}</div>
+        <div class="kpi-sub">${linhas.filter(l => l.enviada).length} tranches</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Por receber</div>
+        <div class="kpi-value" style="color:var(--danger)">${fmtCurrency(totalPorReceber)}</div>
+        <div class="kpi-sub">${linhas.filter(l => l.enviada && !l.pago).length} tranches</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Recebido</div>
+        <div class="kpi-value" style="color:var(--success)">${fmtCurrency(totalRecebido)}</div>
+        <div class="kpi-sub">${linhas.filter(l => l.pago).length} tranches</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <select class="form-control" onchange="state.filters.financeiro.estado = this.value; renderInspect();">
+          <option value="" ${filtro.estado===''?'selected':''}>Todas as tranches</option>
+          <option value="por_faturar" ${filtro.estado==='por_faturar'?'selected':''}>Por faturar</option>
+          <option value="faturado_por_pagar" ${filtro.estado==='faturado_por_pagar'?'selected':''}>Faturado, por receber</option>
+          <option value="pago" ${filtro.estado==='pago'?'selected':''}>Recebido</option>
+        </select>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cliente</th>
+              <th>Fat. Nome</th>
+              <th>Fat. NIF</th>
+              <th>Tranche</th>
+              <th class="num">Valor</th>
+              <th>Fatura Enviada</th>
+              <th>Pagamento</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhasView.length === 0
+              ? `<tr class="empty-row"><td colspan="9">Sem registos</td></tr>`
+              : linhasView.map(l => {
+                const r = l.pedido;
+                const faltamDados = !r.fat_nome || !r.fat_nif;
+                return `
+                <tr class="clickable" onclick="openInspectDetail('${r.id}')">
+                  <td>${escapeHtml(r.id_pedido)}</td>
+                  <td><strong>${escapeHtml(r.cliente)}</strong></td>
+                  <td style="${faltamDados ? 'color:var(--danger)' : ''}">${faltamDados ? '⚠ falta' : escapeHtml(r.fat_nome)}</td>
+                  <td>${escapeHtml(r.fat_nif)}</td>
+                  <td>${l.label}</td>
+                  <td class="num">${fmtCurrency(l.valor)}</td>
+                  <td>${l.enviada ? `<span style="color:var(--success)">${fmtDate(l.enviada)}</span>` : `<span style="color:var(--text-muted)">—</span>`}</td>
+                  <td>${l.pago ? `<span style="color:var(--success)">${fmtDate(l.pago)}</span>` : `<span style="color:var(--text-muted)">—</span>`}</td>
+                  <td onclick="event.stopPropagation()">
+                    <div class="actions">
+                      ${canEdit() ? `
+                        ${!l.enviada ? `<button class="btn btn-secondary btn-sm" onclick="markFinanceiro('${r.id}', ${l.tranche}, 'enviada')" title="Marcar fatura enviada">📤 Fatura</button>` : ''}
+                        ${l.enviada && !l.pago ? `<button class="btn btn-gold btn-sm" onclick="markFinanceiro('${r.id}', ${l.tranche}, 'pago')" title="Marcar pagamento recebido">💰 Pago</button>` : ''}
+                      ` : ''}
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function markFinanceiro(pedidoId, tranche, tipo) {
+  const today = new Date().toISOString().slice(0,10);
+  const date = prompt(tipo === 'enviada' ? 'Data da fatura enviada:' : 'Data do pagamento recebido:', today);
+  if (!date) return;
+  const field = `fat${tranche}_${tipo === 'enviada' ? 'enviada' : 'pago'}`;
+  const { error } = await sb.from('inspect_pedidos').update({ [field]: date }).eq('id', pedidoId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('inspect');
+  renderInspect();
+  showToast(tipo === 'enviada' ? 'Fatura marcada como enviada' : 'Pagamento registado', 'success');
+}
+
+function exportFinanceiro() {
+  const data = state.data.inspect.filter(r =>
+    ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(r.estado)
+  );
+  const linhas = [];
+  data.forEach(r => {
+    linhas.push({
+      id_pedido: r.id_pedido, cliente: r.cliente,
+      fat_nome: r.fat_nome, fat_nif: r.fat_nif, fat_morada: r.fat_morada,
+      fat_codigo_postal: r.fat_codigo_postal, fat_localidade: r.fat_localidade,
+      tranche: 'T1 — Adjudicação',
+      valor: r.fat1_valor, enviada: r.fat1_enviada, pago: r.fat1_pago,
+      data_adjudicacao: r.data_adjudicacao
+    });
+    if (['Com Relatório','Fechada'].includes(r.estado)) {
+      linhas.push({
+        id_pedido: r.id_pedido, cliente: r.cliente,
+        fat_nome: r.fat_nome, fat_nif: r.fat_nif, fat_morada: r.fat_morada,
+        fat_codigo_postal: r.fat_codigo_postal, fat_localidade: r.fat_localidade,
+        tranche: 'T2 — Relatório',
+        valor: r.fat2_valor, enviada: r.fat2_enviada, pago: r.fat2_pago,
+        data_relatorio: r.data_relatorio
+      });
+    }
+  });
+  exportXLSX(linhas, [
+    { key: 'id_pedido', label: 'ID' },
+    { key: 'cliente', label: 'Cliente' },
+    { key: 'fat_nome', label: 'Faturação - Nome' },
+    { key: 'fat_nif', label: 'NIF' },
+    { key: 'fat_morada', label: 'Morada Faturação' },
+    { key: 'fat_codigo_postal', label: 'Código Postal' },
+    { key: 'fat_localidade', label: 'Localidade' },
+    { key: 'tranche', label: 'Tranche' },
+    { key: 'valor', label: 'Valor (€)' },
+    { key: 'enviada', label: 'Fatura Enviada', format: fmtDate },
+    { key: 'pago', label: 'Pagamento Recebido', format: fmtDate }
+  ], 'siga_financeiro_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+// ============================================================
 // ACEITAR INSPECT — VISTA DE ANÁLISE
 // ============================================================
 function renderInspectAnalise() {
@@ -2024,6 +2236,7 @@ function renderInspectAnalise() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
         </div>
         ${canEdit() && semCoords > 0 ? `
@@ -2453,8 +2666,15 @@ function openInspectModal(id) {
       <div class="modal-title">${id ? 'Editar' : 'Novo'} Pedido</div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
+    <div style="padding:12px 24px 0;border-bottom:1px solid var(--border-light)">
+      <div class="tabs" style="margin-bottom:-1px">
+        <button type="button" class="tab-btn active" onclick="switchFormTab('dados')">Dados</button>
+        <button type="button" class="tab-btn" onclick="switchFormTab('faturacao')">Faturação</button>
+      </div>
+    </div>
     <div class="modal-body">
       <form id="form-inspect" onsubmit="return false">
+        <div id="form-tab-dados">
         <div class="form-row">
           <div class="form-group">
             <label>ID</label>
@@ -2589,6 +2809,71 @@ function openInspectModal(id) {
             <textarea class="form-control" name="motivo_nao_adjudicacao" rows="2" style="min-height:60px">${escapeHtml(r.motivo_nao_adjudicacao)}</textarea>
           </div>
         </div>
+        </div>
+
+        <div id="form-tab-faturacao" style="display:none">
+          <div class="form-group">
+            <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Dados de faturação</label>
+          </div>
+          <div class="form-group">
+            <label>Nome</label>
+            <input class="form-control" name="fat_nome" value="${escapeHtml(r.fat_nome)}" placeholder="Nome / Razão social">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>NIF</label>
+              <input class="form-control" name="fat_nif" value="${escapeHtml(r.fat_nif)}" placeholder="000000000">
+            </div>
+            <div class="form-group">
+              <label>Código Postal</label>
+              <input class="form-control" name="fat_codigo_postal" value="${escapeHtml(r.fat_codigo_postal)}" placeholder="0000-000">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Morada</label>
+            <input class="form-control" name="fat_morada" value="${escapeHtml(r.fat_morada)}" placeholder="Rua, nº">
+          </div>
+          <div class="form-group">
+            <label>Localidade</label>
+            <input class="form-control" name="fat_localidade" value="${escapeHtml(r.fat_localidade)}">
+          </div>
+
+          <div style="margin-top:24px;border-top:1px solid var(--border-light);padding-top:16px">
+            <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Tranche 1 — Adjudicação (50%)</label>
+            <div class="form-row-3">
+              <div class="form-group">
+                <label>Valor (€)</label>
+                <input type="number" step="0.01" class="form-control" name="fat1_valor" value="${r.fat1_valor ?? ''}">
+              </div>
+              <div class="form-group">
+                <label>Fatura enviada</label>
+                <input type="date" class="form-control" name="fat1_enviada" value="${r.fat1_enviada ?? ''}">
+              </div>
+              <div class="form-group">
+                <label>Pagamento efetuado</label>
+                <input type="date" class="form-control" name="fat1_pago" value="${r.fat1_pago ?? ''}">
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:16px">
+            <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Tranche 2 — Com Relatório (50%)</label>
+            <div class="form-row-3">
+              <div class="form-group">
+                <label>Valor (€)</label>
+                <input type="number" step="0.01" class="form-control" name="fat2_valor" value="${r.fat2_valor ?? ''}">
+              </div>
+              <div class="form-group">
+                <label>Fatura enviada</label>
+                <input type="date" class="form-control" name="fat2_enviada" value="${r.fat2_enviada ?? ''}">
+              </div>
+              <div class="form-group">
+                <label>Pagamento efetuado</label>
+                <input type="date" class="form-control" name="fat2_pago" value="${r.fat2_pago ?? ''}">
+              </div>
+            </div>
+          </div>
+        </div>
       </form>
     </div>
     <div class="modal-footer">
@@ -2596,6 +2881,14 @@ function openInspectModal(id) {
       <button class="btn btn-primary" onclick="saveInspect('${id || ''}')">${id ? 'Atualizar' : 'Criar Pedido'}</button>
     </div>
   `);
+}
+
+function switchFormTab(tab) {
+  $('#form-tab-dados').style.display = tab === 'dados' ? '' : 'none';
+  $('#form-tab-faturacao').style.display = tab === 'faturacao' ? '' : 'none';
+  document.querySelectorAll('.modal .tab-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.trim().toLowerCase() === (tab === 'dados' ? 'dados' : 'faturação'));
+  });
 }
 
 async function saveInspect(id) {
@@ -2609,6 +2902,8 @@ async function saveInspect(id) {
   }
   if (rec.valor_sem_iva) rec.valor_sem_iva = parseFloat(rec.valor_sem_iva);
   if (rec.valor_adjudicado) rec.valor_adjudicado = parseFloat(rec.valor_adjudicado);
+  if (rec.fat1_valor) rec.fat1_valor = parseFloat(rec.fat1_valor);
+  if (rec.fat2_valor) rec.fat2_valor = parseFloat(rec.fat2_valor);
 
   // Auto-geocode if editing with changed address or creating new with address
   const existing = id ? state.data.inspect.find(x => x.id === id) : null;
@@ -2785,6 +3080,52 @@ async function openInspectDetail(id) {
   `, 'lg');
 }
 
+// ---------- EMAIL NOTIFICATIONS ----------
+let emailJsReady = false;
+function initEmailJS() {
+  try {
+    if (window.emailjs && CONFIG.EMAILJS.PUBLIC_KEY) {
+      window.emailjs.init({ publicKey: CONFIG.EMAILJS.PUBLIC_KEY });
+      emailJsReady = true;
+    }
+  } catch (e) { console.warn('EmailJS init failed', e); }
+}
+
+async function notifyFinanceiro(pedido, fase, dataTransicao, detalhes) {
+  if (!emailJsReady) {
+    console.warn('EmailJS não está pronto — notificação ignorada');
+    return;
+  }
+  try {
+    const valor = fase === 'Adjudicação Efetuada'
+      ? (pedido.valor_adjudicado ? fmtCurrency(pedido.valor_adjudicado) : '—')
+      : (pedido.fat2_valor ? fmtCurrency(pedido.fat2_valor) : (pedido.valor_adjudicado ? fmtCurrency(pedido.valor_adjudicado / 2) : '—'));
+
+    const params = {
+      to_email: 'sara.ferreira@aceitar.pt',
+      cc_emails: 'tiago.faria@aceitar.pt; carlos.ferreira@aceitar.pt',
+      nome_destinatario: 'Sara',
+      fase: fase,
+      cliente: pedido.cliente || '—',
+      id_pedido: pedido.id_pedido || '(sem ID)',
+      data_transicao: fmtDate(dataTransicao),
+      valor: valor,
+      detalhes: detalhes || '',
+      link_pedido: 'https://siga.aceitar.pt'
+    };
+
+    await window.emailjs.send(
+      CONFIG.EMAILJS.SERVICE_ID,
+      CONFIG.EMAILJS.TEMPLATE_ID,
+      params
+    );
+    showToast('Notificação enviada ao financeiro', 'success');
+  } catch (e) {
+    console.error('EmailJS send error', e);
+    showToast('Aviso: notificação por email falhou', 'error');
+  }
+}
+
 // ---------- WORKFLOW TRANSITIONS ----------
 function openTransitionModal(id, transicao) {
   const today = new Date().toISOString().slice(0,10);
@@ -2813,13 +3154,27 @@ function openTransitionModal(id, transicao) {
         </div>`;
     }
     if (ex.type === 'number') {
-      // Valor inicial: se tem defaultFrom, usa esse valor do registo
-      const initialValue = ex.defaultFrom && state.data.inspect.find(p => p.id === id)?.[ex.defaultFrom];
+      const reg = state.data.inspect.find(p => p.id === id);
+      let initialValue = null;
+      if (ex.defaultFrom) {
+        initialValue = reg?.[ex.defaultFrom];
+      } else if (ex.defaultPercent) {
+        // Calculado em runtime após "valor_adjudicado_input" estar preenchido (caso seja a tranche 1)
+        // Para tranche 2: usa valor_adjudicado já guardado
+        if (ex.defaultPercent.from === 'valor_adjudicado_input') {
+          // tranche 1 — calculado dinamicamente após tipar valor_adjudicado
+          initialValue = null;
+        } else {
+          const base = reg?.[ex.defaultPercent.from];
+          if (base) initialValue = (Number(base) * ex.defaultPercent.percent / 100).toFixed(2);
+        }
+      }
       const valAttr = (initialValue !== undefined && initialValue !== null) ? `value="${initialValue}"` : '';
+      const dataAttrs = ex.defaultPercent ? `data-defpercent="${ex.defaultPercent.percent}" data-defpercent-from="${ex.defaultPercent.from}"` : '';
       return `
         <div class="form-group">
           <label>${ex.label} <span class="required">*</span></label>
-          <input type="number" step="0.01" class="form-control" id="extra-${i}" ${valAttr} placeholder="0,00">
+          <input type="number" step="0.01" class="form-control" id="extra-${i}" ${valAttr} ${dataAttrs} placeholder="0,00">
         </div>`;
     }
     if (ex.type === 'textarea') {
@@ -2856,6 +3211,32 @@ function openTransitionModal(id, transicao) {
       <button class="btn ${transicao.danger ? 'btn-danger' : 'btn-primary'}" id="confirm-transition">Confirmar</button>
     </div>
   `, 'sm');
+
+  // Auto-calcular campos com defaultPercent dependentes de outros inputs
+  // (ex: tranche 1 = 50% do valor adjudicado)
+  extras.forEach((ex, i) => {
+    if (ex.field === 'valor_adjudicado') {
+      const sourceEl = $('#extra-' + i);
+      if (sourceEl) {
+        sourceEl.addEventListener('input', () => {
+          extras.forEach((ex2, j) => {
+            if (ex2.defaultPercent && ex2.defaultPercent.from === 'valor_adjudicado_input') {
+              const dep = $('#extra-' + j);
+              if (dep && !dep.dataset.touched) {
+                const v = parseFloat(sourceEl.value);
+                if (!isNaN(v)) dep.value = (v * ex2.defaultPercent.percent / 100).toFixed(2);
+              }
+            }
+          });
+        });
+      }
+    }
+    // Marcar campo como "touched" se utilizador editar manualmente
+    const el = $('#extra-' + i);
+    if (el && ex.type === 'number') {
+      el.addEventListener('change', () => { el.dataset.touched = '1'; });
+    }
+  });
 
   $('#confirm-transition').onclick = async () => {
     const dateValue = $('#transition-date').value;
@@ -2931,6 +3312,23 @@ function openTransitionModal(id, transicao) {
     renderInspect();
     openInspectDetail(id);
     showToast('Estado atualizado para ' + transicao.para, 'success');
+
+    // Notificar financeiro se a transição tiver fase configurada
+    if (transicao.notify) {
+      const updated = state.data.inspect.find(p => p.id === id);
+      if (updated) {
+        let detalhes = '';
+        if (transicao.notify === 'Adjudicação Efetuada') {
+          detalhes = 'Tranche 1 (50%): ' + fmtCurrency(updated.fat1_valor || 0);
+          if (!updated.fat_nome) {
+            detalhes += '\n\n⚠️ ATENÇÃO: faltam preencher os dados de faturação no separador "Faturação".';
+          }
+        } else if (transicao.notify === 'Relatório Entregue') {
+          detalhes = 'Tranche 2 (50%): ' + fmtCurrency(updated.fat2_valor || 0);
+        }
+        notifyFinanceiro(updated, transicao.notify, dateValue, detalhes);
+      }
+    }
   };
 }
 
@@ -3137,6 +3535,7 @@ async function startApp() {
   badge.textContent = state.userRole;
   badge.className = 'user-badge ' + state.userRole;
 
+  initEmailJS();
   await loadAll();
   navigate('dashboard');
 }
