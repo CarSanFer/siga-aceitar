@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h44</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h40</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2094,21 +2094,15 @@ function renderInspectFinanceiro() {
               <th class="num">Valor</th>
               <th>Fatura Enviada</th>
               <th>Pagamento</th>
-              <th class="num">Custo</th>
-              <th class="num">Resultado</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             ${linhasView.length === 0
-              ? `<tr class="empty-row"><td colspan="11">Sem registos</td></tr>`
+              ? `<tr class="empty-row"><td colspan="9">Sem registos</td></tr>`
               : linhasView.map(l => {
                 const r = l.pedido;
                 const faltamDados = !r.fat_nome || !r.fat_nif;
-                const totalRecebido = (r.fat1_pago ? Number(r.fat1_valor) || 0 : 0) + (r.fat2_pago ? Number(r.fat2_valor) || 0 : 0);
-                const resultado = totalRecebido - (Number(r.custo) || 0);
-                // Mostrar custo e resultado apenas na linha T1 (são valores do pedido, não da tranche)
-                const showResultado = l.tranche === 1;
                 return `
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
                   <td>${escapeHtml(r.id_pedido)}</td>
@@ -2119,8 +2113,6 @@ function renderInspectFinanceiro() {
                   <td class="num">${fmtCurrency(l.valor)}</td>
                   <td>${l.enviada ? `<span style="color:var(--success)">${fmtDate(l.enviada)}</span>` : `<span style="color:var(--text-muted)">—</span>`}</td>
                   <td>${l.pago ? `<span style="color:var(--success)">${fmtDate(l.pago)}</span>` : `<span style="color:var(--text-muted)">—</span>`}</td>
-                  <td class="num">${showResultado ? fmtCurrency(r.custo) : '<span style="color:var(--text-muted)">—</span>'}</td>
-                  <td class="num" style="${showResultado && resultado !== 0 ? `color:${resultado >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:600` : ''}">${showResultado ? fmtCurrency(resultado) : '<span style="color:var(--text-muted)">—</span>'}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
                       ${canEdit() ? `
