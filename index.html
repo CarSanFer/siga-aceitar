@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h24</span>
+          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h40</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2073,29 +2073,6 @@ function renderInspectFinanceiro() {
       </div>
     </div>
 
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Por faturar</div>
-        <div class="kpi-value" style="color:var(--warning)">${fmtCurrency(totalAFaturar)}</div>
-        <div class="kpi-sub">${linhas.filter(l => !l.enviada).length} tranches</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Faturado</div>
-        <div class="kpi-value">${fmtCurrency(totalFaturado)}</div>
-        <div class="kpi-sub">${linhas.filter(l => l.enviada).length} tranches</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Por receber</div>
-        <div class="kpi-value" style="color:var(--danger)">${fmtCurrency(totalPorReceber)}</div>
-        <div class="kpi-sub">${linhas.filter(l => l.enviada && !l.pago).length} tranches</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Recebido</div>
-        <div class="kpi-value" style="color:var(--success)">${fmtCurrency(totalRecebido)}</div>
-        <div class="kpi-sub">${linhas.filter(l => l.pago).length} tranches</div>
-      </div>
-    </div>
-
     <div class="card">
       <div class="filter-bar">
         <select class="form-control" onchange="state.filters.financeiro.estado = this.value; renderInspect();">
@@ -2171,13 +2148,16 @@ function exportFinanceiro() {
   );
   const linhas = [];
   data.forEach(r => {
+    const totalRecebido = (r.fat1_pago ? Number(r.fat1_valor) || 0 : 0) + (r.fat2_pago ? Number(r.fat2_valor) || 0 : 0);
+    const resultado = totalRecebido - (Number(r.custo) || 0);
     linhas.push({
       id_pedido: r.id_pedido, cliente: r.cliente,
       fat_nome: r.fat_nome, fat_nif: r.fat_nif, fat_morada: r.fat_morada,
       fat_codigo_postal: r.fat_codigo_postal, fat_localidade: r.fat_localidade,
       tranche: 'T1 — Adjudicação',
       valor: r.fat1_valor, enviada: r.fat1_enviada, pago: r.fat1_pago,
-      data_adjudicacao: r.data_adjudicacao
+      data_adjudicacao: r.data_adjudicacao,
+      custo: r.custo, total_recebido: totalRecebido, resultado: resultado
     });
     if (['Com Relatório','Fechada'].includes(r.estado)) {
       linhas.push({
@@ -2186,7 +2166,8 @@ function exportFinanceiro() {
         fat_codigo_postal: r.fat_codigo_postal, fat_localidade: r.fat_localidade,
         tranche: 'T2 — Relatório',
         valor: r.fat2_valor, enviada: r.fat2_enviada, pago: r.fat2_pago,
-        data_relatorio: r.data_relatorio
+        data_relatorio: r.data_relatorio,
+        custo: r.custo, total_recebido: totalRecebido, resultado: resultado
       });
     }
   });
@@ -2201,7 +2182,10 @@ function exportFinanceiro() {
     { key: 'tranche', label: 'Tranche' },
     { key: 'valor', label: 'Valor (€)' },
     { key: 'enviada', label: 'Fatura Enviada', format: fmtDate },
-    { key: 'pago', label: 'Pagamento Recebido', format: fmtDate }
+    { key: 'pago', label: 'Pagamento Recebido', format: fmtDate },
+    { key: 'custo', label: 'Custo (€)' },
+    { key: 'total_recebido', label: 'Total Recebido (€)' },
+    { key: 'resultado', label: 'Resultado (€)' }
   ], 'siga_financeiro_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
@@ -2226,6 +2210,15 @@ function renderInspectAnalise() {
   const semCoords = data.filter(r =>
     (r.localizacao || r.morada) && (!r.latitude || !r.longitude)
   ).length;
+
+  // KPIs financeiros
+  const totalFaturado = data.reduce((s, r) =>
+    s + (r.fat1_enviada ? Number(r.fat1_valor) || 0 : 0) + (r.fat2_enviada ? Number(r.fat2_valor) || 0 : 0), 0);
+  const totalRecebido = data.reduce((s, r) =>
+    s + (r.fat1_pago ? Number(r.fat1_valor) || 0 : 0) + (r.fat2_pago ? Number(r.fat2_valor) || 0 : 0), 0);
+  const totalCusto = data.reduce((s, r) => s + (Number(r.custo) || 0), 0);
+  const resultado = totalRecebido - totalCusto;
+  const margem = totalRecebido > 0 ? (resultado / totalRecebido * 100) : 0;
 
   $('#section-inspect').innerHTML = `
     <div class="page-header">
@@ -2275,6 +2268,29 @@ function renderInspectAnalise() {
         <div class="kpi-label">Ticket médio (adjudicado)</div>
         <div class="kpi-value">${fmtCurrency(aceites > 0 ? valorAdjudicado / aceites : 0)}</div>
         <div class="kpi-sub">por proposta aceite</div>
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:24px">
+      <div class="kpi-card">
+        <div class="kpi-label">Faturado</div>
+        <div class="kpi-value">${fmtCurrency(totalFaturado)}</div>
+        <div class="kpi-sub">total emitido em faturas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Recebido</div>
+        <div class="kpi-value" style="color:var(--success)">${fmtCurrency(totalRecebido)}</div>
+        <div class="kpi-sub">pagamentos confirmados</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Custo total</div>
+        <div class="kpi-value" style="color:var(--warning)">${fmtCurrency(totalCusto)}</div>
+        <div class="kpi-sub">custos das operações</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Resultado</div>
+        <div class="kpi-value" style="color:${resultado >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmtCurrency(resultado)}</div>
+        <div class="kpi-sub">Recebido − Custo · Margem ${margem.toFixed(1)}%</div>
       </div>
     </div>
 
@@ -2873,6 +2889,25 @@ function openInspectModal(id) {
               </div>
             </div>
           </div>
+
+          <div style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:16px">
+            <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Resultado da operação</label>
+            <div class="form-row-3">
+              <div class="form-group">
+                <label>Custo (€)</label>
+                <input type="number" step="0.01" class="form-control" name="custo" value="${r.custo ?? ''}" placeholder="0,00">
+              </div>
+              <div class="form-group">
+                <label>Total Recebido (€)</label>
+                <input class="form-control" value="${fmtCurrency((Number(r.fat1_pago ? r.fat1_valor : 0) || 0) + (Number(r.fat2_pago ? r.fat2_valor : 0) || 0))}" disabled style="background:var(--bg-muted)">
+              </div>
+              <div class="form-group">
+                <label>Resultado (€)</label>
+                <input class="form-control" value="${fmtCurrency(((Number(r.fat1_pago ? r.fat1_valor : 0) || 0) + (Number(r.fat2_pago ? r.fat2_valor : 0) || 0)) - (Number(r.custo) || 0))}" disabled style="background:var(--bg-muted);font-weight:600">
+              </div>
+            </div>
+            <div class="text-small text-muted">Total Recebido = soma das tranches efetivamente pagas. Resultado = Total Recebido − Custo.</div>
+          </div>
         </div>
       </form>
     </div>
@@ -2904,6 +2939,7 @@ async function saveInspect(id) {
   if (rec.valor_adjudicado) rec.valor_adjudicado = parseFloat(rec.valor_adjudicado);
   if (rec.fat1_valor) rec.fat1_valor = parseFloat(rec.fat1_valor);
   if (rec.fat2_valor) rec.fat2_valor = parseFloat(rec.fat2_valor);
+  if (rec.custo) rec.custo = parseFloat(rec.custo);
 
   // Auto-geocode if editing with changed address or creating new with address
   const existing = id ? state.data.inspect.find(x => x.id === id) : null;
