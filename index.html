@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.04.30-08h44</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.19-00h09</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -854,8 +854,8 @@
 </div>
 
 <!-- ========== MODAL CONTAINER ========== -->
-<div id="modal-overlay" class="modal-overlay" onclick="if(event.target===this) closeModal()">
-  <div id="modal" class="modal" onclick="event.stopPropagation()"></div>
+<div id="modal-overlay" class="modal-overlay">
+  <div id="modal" class="modal"></div>
 </div>
 
 <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none">
@@ -888,12 +888,10 @@ const CONFIG = {
     'Realizada', 'Com Relatório', 'Fechada', 'Cancelada'
   ],
   INSPECT_TIPOS_SERVICO: [
-    'Pré-compra', 'Pré-venda', 'Receção provisória', 'Receção definitiva',
-    'Patologias', 'Due diligence urbanística', 'Inspeção técnica', 'Outro'
+    'Diagnóstico Pré-Compra', 'Diagnóstico Pré-Venda', 'Patologias', 'Inspeção Técnica'
   ],
   INSPECT_CANAIS: [
-    'Website', 'Referência', 'Google', 'LinkedIn', 'Instagram',
-    'Email direto', 'Cliente recorrente', 'Outro'
+    'Google', 'Referência', 'Whatsapp', 'Mail'
   ],
 
   // EmailJS — notificações ao financeiro
@@ -3594,6 +3592,23 @@ $('#login-email').addEventListener('keydown', e => { if (e.key === 'Enter') $('#
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
+});
+
+// Modal overlay: fecha só em mousedown DIRETO no overlay (não em clicks "fantasma")
+// Usar mousedown em vez de click evita closing acidental quando o utilizador
+// arrasta selecção de texto e solta fora do modal.
+$('#modal-overlay').addEventListener('mousedown', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// Evita que Backspace num campo vazio faça "history back" em alguns browsers
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Backspace') return;
+  const t = e.target;
+  if (!t || t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA') {
+    // Backspace fora de input — pode causar history.back
+    if (document.querySelector('#modal-overlay.active')) e.preventDefault();
+  }
 });
 
 // Boot
