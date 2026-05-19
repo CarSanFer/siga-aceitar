@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.19-00h09</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.19-00h30</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -888,7 +888,7 @@ const CONFIG = {
     'Realizada', 'Com Relatório', 'Fechada', 'Cancelada'
   ],
   INSPECT_TIPOS_SERVICO: [
-    'Diagnóstico Pré-Compra', 'Diagnóstico Pré-Venda', 'Patologias', 'Inspeção Técnica'
+    'Diagnóstico Pré-Compra', 'Diagnóstico Pré-Venda', 'Patologias', 'Inspeção Técnica', 'Relatório Técnico'
   ],
   INSPECT_CANAIS: [
     'Google', 'Referência', 'Whatsapp', 'Mail'
@@ -1629,7 +1629,7 @@ function renderConcursos() {
     <div class="card">
       <div class="filter-bar">
         <input type="text" class="form-control search" placeholder="Pesquisar..."
-               value="${escapeHtml(search)}" oninput="state.filters.concursos.search = this.value; renderConcursos();">
+               value="${escapeHtml(search)}" oninput="state.filters.concursos.search = this.value; renderConcursosPreserveFocus();" id="concursos-search">
         <select class="form-control" onchange="state.filters.concursos.status = this.value; renderConcursos();">
           <option value="">Todos os status</option>
           ${statusOptions}
@@ -1953,8 +1953,8 @@ function renderInspect() {
 
     <div class="card">
       <div class="filter-bar">
-        <input type="text" class="form-control search" placeholder="Pesquisar..."
-               value="${escapeHtml(search)}" oninput="state.filters.inspect.search = this.value; renderInspect();">
+        <input type="text" class="form-control search" id="inspect-search" placeholder="Pesquisar..."
+               value="${escapeHtml(search)}" oninput="state.filters.inspect.search = this.value; renderInspectPreserveFocus();">
         <select class="form-control" onchange="state.filters.inspect.estado = this.value; renderInspect();">
           <option value="">Todos os estados</option>
           ${estadoOptions}
@@ -2006,6 +2006,35 @@ function renderInspect() {
 function switchInspectView(view) {
   state.inspectView = view;
   renderInspect();
+}
+
+function renderConcursosPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'concursos-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderConcursos();
+  if (isSearch) {
+    const newEl = document.getElementById('concursos-search');
+    if (newEl) {
+      newEl.focus();
+      if (pos !== null) newEl.setSelectionRange(pos, pos);
+    }
+  }
+}
+
+// Re-render preservando foco do input de pesquisa e posição do cursor
+function renderInspectPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'inspect-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderInspect();
+  if (isSearch) {
+    const newEl = document.getElementById('inspect-search');
+    if (newEl) {
+      newEl.focus();
+      if (pos !== null) newEl.setSelectionRange(pos, pos);
+    }
+  }
 }
 
 // ============================================================
