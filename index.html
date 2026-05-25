@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.19-01h20</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.25-09h17</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1920,6 +1920,7 @@ function renderInspect() {
 
   const cols = [
     { key: 'id_pedido', label: 'ID' },
+    { key: 'referencia', label: 'Referência' },
     { key: 'data_pedido', label: 'Data Pedido' },
     { key: 'cliente', label: 'Cliente' },
     { key: 'localizacao', label: 'Localização' },
@@ -1978,6 +1979,7 @@ function renderInspect() {
               : rows.map(r => `
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
                   <td>${escapeHtml(r.id_pedido)}</td>
+                  <td>${escapeHtml(r.referencia)}</td>
                   <td>${fmtDate(r.data_pedido)}</td>
                   <td><strong>${escapeHtml(r.cliente)}</strong></td>
                   <td>${escapeHtml(r.localizacao)}</td>
@@ -2732,6 +2734,10 @@ function openInspectModal(id) {
             <input class="form-control" name="id_pedido" value="${escapeHtml(r.id_pedido)}" placeholder="Ex: AI-2026-001">
           </div>
           <div class="form-group">
+            <label>Referência</label>
+            <input class="form-control" name="referencia" value="${escapeHtml(r.referencia)}" placeholder="Ref. do cliente / processo">
+          </div>
+          <div class="form-group">
             <label>Data Pedido <span class="required">*</span></label>
             <input type="date" class="form-control" name="data_pedido" value="${r.data_pedido ?? ''}" required>
           </div>
@@ -3080,6 +3086,7 @@ async function openInspectDetail(id) {
       <!-- Dados -->
       <div class="form-row-3 mb-lg">
         <div><label class="text-small text-muted">ID</label><div>${r.id_pedido ? escapeHtml(r.id_pedido) : '—'}</div></div>
+        <div><label class="text-small text-muted">Referência</label><div>${r.referencia ? escapeHtml(r.referencia) : '—'}</div></div>
         <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
         <div><label class="text-small text-muted">Cliente</label><div>${r.cliente ? escapeHtml(r.cliente) : '—'}</div></div>
         <div><label class="text-small text-muted">Email</label><div>${r.email ? escapeHtml(r.email) : '—'}</div></div>
@@ -3506,6 +3513,7 @@ function exportInspect() {
     ['id_pedido','cliente','email','telefone','localizacao','tipo_servico']);
   exportXLSX(rows, [
     { key: 'id_pedido', label: 'ID' },
+    { key: 'referencia', label: 'Referência' },
     { key: 'data_pedido', label: 'Data Pedido', format: fmtDate },
     { key: 'estado', label: 'Estado' },
     { key: 'cliente', label: 'Cliente' },
@@ -3539,6 +3547,7 @@ async function importInspect() {
     if (!row['Cliente']) return null;
     return {
       id_pedido: row['ID'] || null,
+      referencia: row['Referência'] || row['Referencia'] || null,
       data_pedido: parseDateValue(row['Data Pedido'] || row['Data da Proposta'] || row['Pedido']) || new Date().toISOString().slice(0,10),
       estado: CONFIG.INSPECT_ESTADOS.includes(row['Estado']) ? row['Estado'] : 'Em Aberto',
       cliente: row['Cliente'],
