@@ -484,6 +484,13 @@
     .badge-fechada { background: #d1fae5; color: #065f46; }
     .badge-cancelada,
     .badge-cancelado { background: #f1f5f9; color: #475569; }
+    .badge-aprovado { background: #dbeafe; color: #1e40af; }
+    .badge-naoaprovado { background: var(--danger-bg); color: var(--danger); }
+    .badge-aguardaresultado { background: #fef3c7; color: #92400e; }
+    .badge-aguardaconfirmacao { background: #fde68a; color: #92400e; }
+    .badge-ganho { background: var(--success-bg); color: var(--success); }
+    .badge-perdido { background: var(--danger-bg); color: var(--danger); }
+    .badge-eliminados { background: #f1f5f9; color: #475569; }
 
     /* Workflow stepper */
     .workflow-bar {
@@ -817,7 +824,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.26-12h38</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.26-15h53</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -870,17 +877,60 @@ const CONFIG = {
   SUPABASE_URL: 'https://krryihsekhhexzjvalcc.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtycnlpaHNla2hoZXh6anZhbGNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMjYzOTgsImV4cCI6MjA5MjYwMjM5OH0.bka7Ijgd3nEtFHpMqiSBX3A0J_y5M10s3x5XosZ3HI8',
 
-  CONCURSO_STATUS: [
-    'Pendente', 'Em preparação', 'Submetido', 'Adjudicado',
-    'Não adjudicado', 'Cancelado'
-  ],
-  CONCURSO_TIPOS: [
-    'Empreitada', 'Fiscalização', 'Coordenação de Segurança',
-    'Gestão de Projeto', 'Consultoria', 'Outro'
-  ],
   CONCURSO_PLATAFORMAS: [
-    'Vortal', 'Acingov', 'Ambisig', 'Gatewit', 'SaphetyGov',
-    'Portal Base', 'Direto', 'Outra'
+    'AcinGov', 'Anogov', 'Vortal', 'compraspt', 'Outro'
+  ],
+  CONCURSO_AMBITOS: [
+    { key: 'ambito_fisc', label: 'FISC' },
+    { key: 'ambito_cso', label: 'CSO' },
+    { key: 'ambito_qual', label: 'QUAL' },
+    { key: 'ambito_amb', label: 'AMB' },
+    { key: 'ambito_proj', label: 'PROJ' }
+  ],
+  // Workflow do Resultado do concurso
+  CONCURSO_WORKFLOW: {
+    'Aprovado': [
+      { para: 'Aguarda Resultado', label: 'Marcar Aguarda Resultado', dataField: 'data_aguarda_resultado', dataLabel: 'Data',
+        extras: [
+          { field: 'valor_aceitar', label: 'Valor Aceitar (€)', type: 'number' },
+          { field: 'posicao', label: 'Posição', type: 'number' }
+        ] }
+    ],
+    'Não Aprovado': [],
+    'Aguarda Resultado': [
+      { para: 'Ganho', label: 'Marcar Ganho', dataField: 'data_ganho', dataLabel: 'Data' },
+      { para: 'Perdido', label: 'Marcar Perdido', dataField: 'data_perdido', dataLabel: 'Data', danger: true,
+        extras: [
+          { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
+          { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
+        ] }
+    ],
+    'Ganho': [
+      { para: 'Adjudicado', label: 'Adjudicado', dataField: 'data_adjudicado', dataLabel: 'Data' },
+      { para: 'Não Adjudicado', label: 'Não Adjudicado', dataField: 'data_nao_adjudicado', dataLabel: 'Data', danger: true,
+        extras: [
+          { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
+          { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
+        ] },
+      { para: 'Eliminados', label: 'Eliminados', dataField: 'data_eliminados', dataLabel: 'Data', danger: true },
+      { para: 'Aguarda Confirmação', label: 'Aguarda Confirmação', dataField: 'data_aguarda_confirmacao', dataLabel: 'Data' }
+    ],
+    'Perdido': [],
+    'Adjudicado': [],
+    'Não Adjudicado': [],
+    'Eliminados': [],
+    'Aguarda Confirmação': [
+      { para: 'Adjudicado', label: 'Adjudicado', dataField: 'data_adjudicado', dataLabel: 'Data' },
+      { para: 'Não Adjudicado', label: 'Não Adjudicado', dataField: 'data_nao_adjudicado', dataLabel: 'Data', danger: true,
+        extras: [
+          { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
+          { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
+        ] }
+    ]
+  },
+  CONCURSO_ESTADOS: [
+    'Aprovado', 'Não Aprovado', 'Aguarda Resultado', 'Ganho', 'Perdido',
+    'Adjudicado', 'Não Adjudicado', 'Eliminados', 'Aguarda Confirmação'
   ],
 
   INSPECT_ESTADOS: [
@@ -968,6 +1018,7 @@ const state = {
   currentSection: 'dashboard',
   inspectView: 'listagem',
   frotaView: 'listagem',
+  concursoView: 'listagem',
   data: {
     concursos: [],
     inspect: [],
@@ -981,11 +1032,11 @@ const state = {
   charts: {},
   map: null,
   sort: {
-    concursos: { key: 'entrega', dir: 'asc' },
+    concursos: { key: 'data', dir: 'desc' },
     inspect:   { key: 'data_pedido', dir: 'desc' }
   },
   filters: {
-    concursos: { search: '', status: '' },
+    concursos: { search: '', estado: '' },
     inspect:   { search: '', estado: '' },
     frota:     { search: '', tipo: '' },
     frotaDespesas: { viatura: '', tipo: '' }
@@ -1463,12 +1514,12 @@ function renderDashboard() {
   const i = state.data.inspect;
 
   const concursosAtivos = c.filter(x =>
-    ['Pendente', 'Em preparação', 'Submetido'].includes(x.status)
+    ['Aprovado', 'Aguarda Resultado', 'Ganho', 'Aguarda Confirmação'].includes(x.estado)
   ).length;
-  const concursosAdjudicados = c.filter(x => x.status === 'Adjudicado').length;
+  const concursosAdjudicados = c.filter(x => x.estado === 'Adjudicado').length;
   const valorAdjudicado = c
-    .filter(x => x.status === 'Adjudicado')
-    .reduce((s, x) => s + (Number(x.valor_base) || 0), 0);
+    .filter(x => x.estado === 'Adjudicado')
+    .reduce((s, x) => s + (Number(x.valor_aceitar) || Number(x.valor_base) || 0), 0);
 
   const propostasPendentes = i.filter(x =>
     ['Em Aberto', 'Pendente', 'Enviada'].includes(x.estado)
@@ -1478,12 +1529,10 @@ function renderDashboard() {
     .filter(x => ['Adjudicada','Agendada','Realizada','Com Relatório','Fechada'].includes(x.estado))
     .reduce((s, x) => s + (Number(x.valor_sem_iva) || 0), 0);
 
-  // Entregas próximas
-  const proximas = c
-    .filter(x => x.entrega && ['Pendente','Em preparação'].includes(x.status))
-    .map(x => ({ ...x, dias: daysUntil(x.entrega) }))
-    .filter(x => x.dias !== null && x.dias >= -3 && x.dias <= 30)
-    .sort((a, b) => a.dias - b.dias);
+  // Concursos a aguardar resultado
+  const aguardar = c
+    .filter(x => ['Aguarda Resultado','Aguarda Confirmação'].includes(x.estado))
+    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
 
   $('#section-dashboard').innerHTML = `
     <div class="page-header">
@@ -1497,7 +1546,7 @@ function renderDashboard() {
       <div class="kpi-card">
         <div class="kpi-label">Concursos ativos</div>
         <div class="kpi-value">${concursosAtivos}</div>
-        <div class="kpi-sub">Pendentes + em preparação + submetidos</div>
+        <div class="kpi-sub">Aprovado + aguarda + ganho</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Adjudicados</div>
@@ -1518,31 +1567,29 @@ function renderDashboard() {
 
     <div class="card mb-lg">
       <div class="card-header">
-        <div class="card-title">Entregas próximas de concursos</div>
+        <div class="card-title">Concursos a aguardar resultado</div>
       </div>
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Entidade</th>
+              <th>Sigla</th>
               <th>Nome</th>
-              <th>Entrega</th>
-              <th class="num">Dias restantes</th>
-              <th>Status</th>
+              <th>Data</th>
+              <th class="num">Valor Aceitar</th>
+              <th>Estado</th>
             </tr>
           </thead>
           <tbody>
-            ${proximas.length === 0
-              ? `<tr class="empty-row"><td colspan="5">Sem entregas nos próximos 30 dias</td></tr>`
-              : proximas.map(r => `
+            ${aguardar.length === 0
+              ? `<tr class="empty-row"><td colspan="5">Sem concursos a aguardar resultado</td></tr>`
+              : aguardar.map(r => `
                 <tr>
-                  <td>${escapeHtml(r.entidade)}</td>
+                  <td>${escapeHtml(r.sigla)}</td>
                   <td>${escapeHtml(r.nome)}</td>
-                  <td>${fmtDate(r.entrega)}</td>
-                  <td class="num" style="color: ${r.dias < 3 ? 'var(--danger)' : r.dias < 7 ? 'var(--warning)' : 'var(--text)'}; font-weight: 600;">
-                    ${r.dias < 0 ? 'Atrasado ' + Math.abs(r.dias) + 'd' : r.dias + ' dias'}
-                  </td>
-                  <td>${badge(r.status)}</td>
+                  <td>${fmtDate(r.data)}</td>
+                  <td class="num">${fmtCurrency(r.valor_aceitar)}</td>
+                  <td>${badge(r.estado)}</td>
                 </tr>
               `).join('')}
           </tbody>
@@ -1565,7 +1612,7 @@ function renderDashboard() {
   // Charts
   const chartColors = ['#1a3a5c','#c9a24a','#2e7d4a','#b91c1c','#6b6b6b','#234969','#d97706'];
   const countsC = {};
-  c.forEach(r => { countsC[r.status] = (countsC[r.status]||0)+1; });
+  c.forEach(r => { countsC[r.estado] = (countsC[r.estado]||0)+1; });
   new Chart($('#chart-concursos'), {
     type: 'doughnut',
     data: {
@@ -1590,91 +1637,115 @@ function renderDashboard() {
 // ============================================================
 // CONCURSOS
 // ============================================================
+function switchConcursoView(view) {
+  state.concursoView = view;
+  renderConcursos();
+}
+
+function concursoAmbitoLabels(r) {
+  return CONFIG.CONCURSO_AMBITOS.filter(a => r[a.key]).map(a => a.label).join(', ');
+}
+
 function renderConcursos() {
-  const { search, status } = state.filters.concursos;
+  if (state.concursoView === 'financeiro') { renderConcursoFinanceiro(); return; }
+  if (state.concursoView === 'analise') { renderConcursoAnalise(); return; }
+  renderConcursoListagem();
+}
+
+function renderConcursoListagem() {
+  const { search, estado } = state.filters.concursos;
   const { key, dir } = state.sort.concursos;
-  let rows = applyFilters(
-    state.data.concursos,
-    state.filters.concursos,
-    ['entidade','nome','localizacao','tipo','plataforma']
-  );
-  rows = sortRows(rows, key, dir);
+  let data = [...state.data.concursos];
 
-  const statusOptions = CONFIG.CONCURSO_STATUS.map(s =>
-    `<option value="${s}" ${status===s?'selected':''}>${s}</option>`
-  ).join('');
+  if (search) {
+    const q = search.toLowerCase();
+    data = data.filter(c =>
+      (c.nome || '').toLowerCase().includes(q) ||
+      (c.sigla || '').toLowerCase().includes(q) ||
+      (c.localizacao || '').toLowerCase().includes(q) ||
+      (c.entidade || '').toLowerCase().includes(q)
+    );
+  }
+  if (estado) data = data.filter(c => c.estado === estado);
 
-  const cols = [
-    { key: 'entidade', label: 'Entidade' },
-    { key: 'nome', label: 'Nome' },
-    { key: 'localizacao', label: 'Local' },
-    { key: 'plataforma', label: 'Plataforma' },
-    { key: 'tipo', label: 'Tipo' },
-    { key: 'valor_base', label: 'Valor Base', num: true },
-    { key: 'entrega', label: 'Entrega' },
-    { key: 'status', label: 'Status' }
-  ];
+  data.sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb||'').toLowerCase(); }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const estadoOptions = CONFIG.CONCURSO_ESTADOS.map(s =>
+    `<option ${estado===s?'selected':''}>${s}</option>`).join('');
+
+  const sortArrow = (k) => key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
 
   $('#section-concursos').innerHTML = `
     <div class="page-header">
       <div>
         <div class="page-title">Concursos</div>
-        <div class="page-subtitle">${state.data.concursos.length} registos · ${rows.length} visíveis</div>
+        <div class="page-subtitle">${data.length} concurso(s)</div>
       </div>
       <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchConcursoView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchConcursoView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchConcursoView('analise')">Análise</button>
+        </div>
         <button class="btn btn-secondary" onclick="exportConcursos()">⬇ Export XLSX</button>
         ${canEdit() ? `
           <button class="btn btn-secondary" onclick="importConcursos()">⬆ Import XLSX</button>
           <button class="btn btn-gold" onclick="openConcursoModal()">+ Novo Concurso</button>
         ` : ''}
-        ${isAdmin() ? `
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('concursos','Concursos','concursos')" title="Apagar todos os registos">🗑 Apagar tudo</button>
-        ` : ''}
+        ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('concursos','Concursos','concursos')" title="Apagar tudo">🗑 Apagar tudo</button>` : ''}
       </div>
     </div>
 
     <div class="card">
       <div class="filter-bar">
-        <input type="text" class="form-control search" placeholder="Pesquisar..."
-               value="${escapeHtml(search)}" oninput="state.filters.concursos.search = this.value; renderConcursosPreserveFocus();" id="concursos-search">
-        <select class="form-control" onchange="state.filters.concursos.status = this.value; renderConcursos();">
-          <option value="">Todos os status</option>
-          ${statusOptions}
+        <input type="text" class="form-control search" id="concursos-search" placeholder="Pesquisar nome, sigla, localização, entidade..."
+               value="${escapeHtml(search)}" oninput="state.filters.concursos.search = this.value; renderConcursosPreserveFocus();">
+        <select class="form-control" onchange="state.filters.concursos.estado = this.value; renderConcursos();">
+          <option value="">Todos os estados</option>
+          ${estadoOptions}
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="state.filters.concursos={search:'',status:''};renderConcursos();">Limpar</button>
+        <button class="btn btn-ghost btn-sm" onclick="state.filters.concursos={search:'',estado:''};renderConcursos();">Limpar</button>
       </div>
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
             <tr>
-              ${cols.map(c => `
-                <th class="${c.num?'num':''} ${key===c.key ? 'sort-'+dir : ''}"
-                    onclick="toggleSort('concursos','${c.key}')">${c.label}</th>
-              `).join('')}
+              <th class="clickable" onclick="sortConcursos('nome')">Nome${sortArrow('nome')}</th>
+              <th>Âmbito</th>
+              <th class="clickable" onclick="sortConcursos('sigla')">Sigla${sortArrow('sigla')}</th>
+              <th>Localização</th>
+              <th>Plataforma</th>
+              <th class="num clickable" onclick="sortConcursos('valor_base')">Valor Base${sortArrow('valor_base')}</th>
+              <th class="clickable" onclick="sortConcursos('data')">Data${sortArrow('data')}</th>
+              <th>Estado</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            ${rows.length === 0
-              ? `<tr class="empty-row"><td colspan="${cols.length+1}">Sem registos</td></tr>`
-              : rows.map(r => `
-                <tr class="clickable" onclick="openConcursoDetail('${r.id}')">
-                  <td>${escapeHtml(r.entidade)}</td>
-                  <td><strong>${escapeHtml(r.nome)}</strong></td>
-                  <td>${escapeHtml(r.localizacao)}</td>
-                  <td>${escapeHtml(r.plataforma)}</td>
-                  <td>${escapeHtml(r.tipo)}</td>
-                  <td class="num">${fmtCurrency(r.valor_base)}</td>
-                  <td>${fmtDate(r.entrega)}</td>
-                  <td>${badge(r.status)}</td>
+            ${data.length === 0
+              ? `<tr class="empty-row"><td colspan="9">Sem concursos</td></tr>`
+              : data.map(c => `
+                <tr class="clickable" onclick="openConcursoDetail('${c.id}')">
+                  <td><strong>${escapeHtml(c.nome)}</strong></td>
+                  <td><span class="text-small">${escapeHtml(concursoAmbitoLabels(c))}</span></td>
+                  <td>${escapeHtml(c.sigla)}</td>
+                  <td>${escapeHtml(c.localizacao)}</td>
+                  <td>${escapeHtml(c.plataforma)}</td>
+                  <td class="num">${fmtCurrency(c.valor_base)}</td>
+                  <td>${fmtDate(c.data)}</td>
+                  <td>${badge(c.estado)}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
-                      ${canEdit() ? `
-                        <button class="btn btn-ghost btn-sm" onclick="openConcursoModal('${r.id}')" title="Editar">✎</button>
-                      ` : ''}
-                      ${isAdmin() ? `
-                        <button class="btn btn-ghost btn-sm" onclick="deleteConcurso('${r.id}')" title="Eliminar" style="color:var(--danger)">🗑</button>
-                      ` : ''}
+                      ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="openConcursoModal('${c.id}')" title="Editar">✎</button>` : ''}
+                      ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteConcurso('${c.id}')" title="Eliminar">🗑</button>` : ''}
                     </div>
                   </td>
                 </tr>
@@ -1686,19 +1757,58 @@ function renderConcursos() {
   `;
 }
 
-function toggleSort(section, key) {
-  const s = state.sort[section];
+function sortConcursos(key) {
+  const s = state.sort.concursos;
   if (s.key === key) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
   else { s.key = key; s.dir = 'asc'; }
-  if (section === 'concursos') renderConcursos();
-  else if (section === 'inspect') renderInspect();
+  renderConcursos();
+}
+
+function renderConcursosPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'concursos-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderConcursos();
+  if (isSearch) {
+    const newEl = document.getElementById('concursos-search');
+    if (newEl) { newEl.focus(); if (pos !== null) newEl.setSelectionRange(pos, pos); }
+  }
 }
 
 function openConcursoModal(id) {
-  const r = id ? state.data.concursos.find(x => x.id === id) : {};
-  const tipoOpts = CONFIG.CONCURSO_TIPOS.map(t => `<option ${r.tipo===t?'selected':''}>${t}</option>`).join('');
+  const r = id ? state.data.concursos.find(x => x.id === id) : {
+    estado: 'Aprovado',
+    data: new Date().toISOString().slice(0,10)
+  };
   const platOpts = CONFIG.CONCURSO_PLATAFORMAS.map(p => `<option ${r.plataforma===p?'selected':''}>${p}</option>`).join('');
-  const statusOpts = CONFIG.CONCURSO_STATUS.map(s => `<option ${r.status===s?'selected':''}>${s}</option>`).join('');
+  const ambitoChecks = CONFIG.CONCURSO_AMBITOS.map(a => `
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;cursor:pointer">
+      <input type="checkbox" name="${a.key}" ${r[a.key] ? 'checked' : ''}> ${a.label}
+    </label>
+  `).join('');
+
+  // Histórico de datas das transições
+  const datasHist = [
+    ['Aprovado', r.data_aprovado],
+    ['Não Aprovado', r.data_nao_aprovado],
+    ['Aguarda Resultado', r.data_aguarda_resultado],
+    ['Ganho', r.data_ganho],
+    ['Perdido', r.data_perdido],
+    ['Adjudicado', r.data_adjudicado],
+    ['Não Adjudicado', r.data_nao_adjudicado],
+    ['Eliminados', r.data_eliminados],
+    ['Aguarda Confirmação', r.data_aguarda_confirmacao]
+  ].filter(([,d]) => d);
+
+  const histHTML = datasHist.length === 0 ? '' : `
+    <div style="margin-top:24px;border-top:1px solid var(--border-light);padding-top:16px">
+      <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Histórico de transições</label>
+      <div class="form-row-3" style="gap:12px">
+        ${datasHist.map(([nome, data]) => `
+          <div><div class="text-small text-muted">${nome}</div><div style="font-weight:600">${fmtDate(data)}</div></div>
+        `).join('')}
+      </div>
+    </div>`;
 
   showModal(`
     <div class="modal-header">
@@ -1707,21 +1817,28 @@ function openConcursoModal(id) {
     </div>
     <div class="modal-body">
       <form id="form-concurso" onsubmit="return false">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Entidade</label>
-            <input class="form-control" name="entidade" value="${escapeHtml(r.entidade)}">
-          </div>
-          <div class="form-group">
-            <label>Nome</label>
-            <input class="form-control" name="nome" value="${escapeHtml(r.nome)}">
-          </div>
+        <div class="form-group">
+          <label>Nome</label>
+          <input class="form-control" name="nome" value="${escapeHtml(r.nome)}">
         </div>
+
+        <div class="form-group">
+          <label>Âmbito</label>
+          <div style="padding:8px 0">${ambitoChecks}</div>
+        </div>
+
         <div class="form-row">
+          <div class="form-group">
+            <label>Sigla</label>
+            <input class="form-control" name="sigla" value="${escapeHtml(r.sigla)}" placeholder="Ex: CM SMFeira">
+          </div>
           <div class="form-group">
             <label>Localização</label>
             <input class="form-control" name="localizacao" value="${escapeHtml(r.localizacao)}">
           </div>
+        </div>
+
+        <div class="form-row">
           <div class="form-group">
             <label>Plataforma</label>
             <select class="form-control" name="plataforma">
@@ -1729,38 +1846,71 @@ function openConcursoModal(id) {
               ${platOpts}
             </select>
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
-            <label>Tipo</label>
-            <select class="form-control" name="tipo">
-              <option value="">Selecionar...</option>
-              ${tipoOpts}
-            </select>
+            <label>Data</label>
+            <input type="date" class="form-control" name="data" value="${r.data ?? ''}">
           </div>
+        </div>
+
+        <div class="form-row-3">
           <div class="form-group">
             <label>Valor Base (€)</label>
             <input type="number" step="0.01" class="form-control" name="valor_base" value="${r.valor_base ?? ''}">
           </div>
-        </div>
-        <div class="form-row">
           <div class="form-group">
-            <label>Duração</label>
-            <input class="form-control" name="duracao" value="${escapeHtml(r.duracao)}" placeholder="Ex: 12 meses">
+            <label>Caução (%)</label>
+            <input type="number" step="0.001" class="form-control" name="caucao" value="${r.caucao ?? ''}" placeholder="ex: 0.05">
           </div>
           <div class="form-group">
-            <label>Entrega</label>
-            <input type="date" class="form-control" name="entrega" value="${r.entrega ?? ''}">
+            <label>Duração (meses)</label>
+            <input type="number" step="1" class="form-control" name="duracao_meses" value="${r.duracao_meses ?? ''}">
           </div>
         </div>
+
+        ${id ? `
         <div class="form-group">
-          <label>Status</label>
-          <select class="form-control" name="status">${statusOpts}</select>
+          <label>Estado</label>
+          <input class="form-control" value="${escapeHtml(r.estado)}" disabled>
+          <input type="hidden" name="estado" value="${escapeHtml(r.estado)}">
         </div>
+        ` : `
+        <div class="form-group">
+          <label>Estado inicial</label>
+          <select class="form-control" name="estado">
+            <option value="Aprovado" ${r.estado==='Aprovado'?'selected':''}>Aprovado</option>
+            <option value="Não Aprovado" ${r.estado==='Não Aprovado'?'selected':''}>Não Aprovado</option>
+          </select>
+        </div>
+        `}
+
+        <div style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:16px">
+          <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Resultado (avançado)</label>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Valor Aceitar (€)</label>
+              <input type="number" step="0.01" class="form-control" name="valor_aceitar" value="${r.valor_aceitar ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Posição</label>
+              <input type="number" step="1" class="form-control" name="posicao" value="${r.posicao ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Valor Vencedor (€)</label>
+              <input type="number" step="0.01" class="form-control" name="valor_vencedor" value="${r.valor_vencedor ?? ''}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Entidade Vencedora</label>
+            <input class="form-control" name="entidade" value="${escapeHtml(r.entidade)}">
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Notas</label>
-          <textarea class="form-control" name="notas">${escapeHtml(r.notas)}</textarea>
+          <textarea class="form-control" name="notas" rows="2" style="min-height:60px">${escapeHtml(r.notas)}</textarea>
         </div>
+
+        ${histHTML}
       </form>
     </div>
     <div class="modal-footer">
@@ -1772,18 +1922,24 @@ function openConcursoModal(id) {
 
 async function saveConcurso(id) {
   const form = $('#form-concurso');
-  const fd = new FormData(form);
   const rec = {};
-  fd.forEach((v, k) => { rec[k] = v === '' ? null : v; });
-  if (rec.valor_base) rec.valor_base = parseFloat(rec.valor_base);
+  new FormData(form).forEach((val, key) => { rec[key] = val === '' ? null : val; });
+  // Checkboxes do âmbito (FormData só inclui os marcados)
+  CONFIG.CONCURSO_AMBITOS.forEach(a => { rec[a.key] = form[a.key].checked; });
 
-  let error;
-  if (id) {
-    ({ error } = await sb.from('concursos').update(rec).eq('id', id));
-  } else {
-    rec.criado_por = null;
-    ({ error } = await sb.from('concursos').insert(rec));
+  ['valor_base','caucao','valor_aceitar','valor_vencedor'].forEach(k => { if (rec[k]) rec[k] = parseFloat(rec[k]); });
+  ['duracao_meses','posicao'].forEach(k => { if (rec[k]) rec[k] = parseInt(rec[k]); });
+
+  // Estado inicial: regista a data correspondente
+  if (!id && rec.estado) {
+    const today = new Date().toISOString().slice(0,10);
+    if (rec.estado === 'Aprovado') rec.data_aprovado = today;
+    else if (rec.estado === 'Não Aprovado') rec.data_nao_aprovado = today;
   }
+
+  const { error } = id
+    ? await sb.from('concursos').update(rec).eq('id', id)
+    : await sb.from('concursos').insert(rec);
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
   closeModal();
   await reloadTable('concursos');
@@ -1792,9 +1948,8 @@ async function saveConcurso(id) {
 }
 
 function deleteConcurso(id) {
-  const r = state.data.concursos.find(x => x.id === id);
-  confirmAction('Eliminar o concurso "' + (r?.nome || '—') + '"?', async () => {
-    const { error } = await sb.from('concursos').delete().eq('id', id);
+  if (!confirm('Eliminar este concurso?')) return;
+  sb.from('concursos').delete().eq('id', id).then(async ({ error }) => {
     if (error) { showToast('Erro: ' + error.message, 'error'); return; }
     await reloadTable('concursos');
     renderConcursos();
@@ -1805,99 +1960,289 @@ function deleteConcurso(id) {
 function openConcursoDetail(id) {
   const r = state.data.concursos.find(x => x.id === id);
   if (!r) return;
+  const transicoes = CONFIG.CONCURSO_WORKFLOW[r.estado] || [];
+
+  const datasHist = [
+    ['Aprovado', r.data_aprovado],
+    ['Não Aprovado', r.data_nao_aprovado],
+    ['Aguarda Resultado', r.data_aguarda_resultado],
+    ['Ganho', r.data_ganho],
+    ['Perdido', r.data_perdido],
+    ['Adjudicado', r.data_adjudicado],
+    ['Não Adjudicado', r.data_nao_adjudicado],
+    ['Eliminados', r.data_eliminados],
+    ['Aguarda Confirmação', r.data_aguarda_confirmacao]
+  ].filter(([,d]) => d);
+
   showModal(`
     <div class="modal-header">
-      <div class="modal-title">${escapeHtml(r.nome || '(sem nome)')}</div>
+      <div>
+        <div class="modal-title">${escapeHtml(r.nome) || '(sem nome)'}</div>
+        <div class="text-small text-muted">${escapeHtml(r.sigla)}${r.localizacao ? ' · ' + escapeHtml(r.localizacao) : ''}</div>
+      </div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
-      <div class="form-row mb-lg">
-        <div><label class="text-small text-muted">Entidade</label><div>${escapeHtml(r.entidade)}</div></div>
-        <div><label class="text-small text-muted">Status</label><div>${badge(r.status)}</div></div>
-        <div><label class="text-small text-muted">Localização</label><div>${escapeHtml(r.localizacao)}</div></div>
-        <div><label class="text-small text-muted">Plataforma</label><div>${escapeHtml(r.plataforma)}</div></div>
-        <div><label class="text-small text-muted">Tipo</label><div>${escapeHtml(r.tipo)}</div></div>
+      <div class="form-row-3 mb-lg">
+        <div><label class="text-small text-muted">Estado</label><div>${badge(r.estado)}</div></div>
+        <div><label class="text-small text-muted">Âmbito</label><div>${escapeHtml(concursoAmbitoLabels(r)) || '—'}</div></div>
+        <div><label class="text-small text-muted">Plataforma</label><div>${escapeHtml(r.plataforma) || '—'}</div></div>
         <div><label class="text-small text-muted">Valor Base</label><div>${fmtCurrency(r.valor_base)}</div></div>
-        <div><label class="text-small text-muted">Duração</label><div>${escapeHtml(r.duracao)}</div></div>
-        <div><label class="text-small text-muted">Entrega</label><div>${fmtDate(r.entrega)}</div></div>
+        <div><label class="text-small text-muted">Caução</label><div>${r.caucao != null ? (r.caucao*100).toFixed(1) + '%' : '—'}</div></div>
+        <div><label class="text-small text-muted">Duração</label><div>${r.duracao_meses != null ? r.duracao_meses + ' meses' : '—'}</div></div>
+        <div><label class="text-small text-muted">Valor Aceitar</label><div>${fmtCurrency(r.valor_aceitar)}</div></div>
+        <div><label class="text-small text-muted">Posição</label><div>${r.posicao != null ? r.posicao : '—'}</div></div>
+        <div><label class="text-small text-muted">Valor Vencedor</label><div>${fmtCurrency(r.valor_vencedor)}</div></div>
+        <div><label class="text-small text-muted">Entidade Vencedora</label><div>${escapeHtml(r.entidade) || '—'}</div></div>
+        <div><label class="text-small text-muted">Data</label><div>${fmtDate(r.data)}</div></div>
       </div>
-      ${r.notas ? `<div class="mb-lg"><label class="text-small text-muted">Notas</label><div style="white-space:pre-wrap;padding-top:4px;">${escapeHtml(r.notas)}</div></div>` : ''}
 
-      <div class="ia-panel" id="ia-panel-concurso">
-        ${r.analise_ia ? `
-          <h4>Análise IA</h4>
-          <div class="ia-content">${escapeHtml(r.analise_ia)}</div>
-          <div class="ia-meta">Gerada em ${fmtDateTime(r.analise_ia_data)}</div>
-          ${canEdit() ? `<div class="mt"><button class="btn btn-secondary btn-sm" onclick="runAnalysisConcurso('${r.id}')">🔄 Regenerar</button></div>` : ''}
-        ` : `
-          <h4>Análise IA</h4>
-          <div class="text-muted text-small">Ainda não foi gerada uma análise para este concurso.</div>
-          ${canEdit() ? `<div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisConcurso('${r.id}')">Gerar análise</button></div>` : ''}
-        `}
-      </div>
+      ${canEdit() && transicoes.length > 0 ? `
+        <div style="border-top:1px solid var(--border-light);padding-top:16px;margin-bottom:8px">
+          <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Avançar estado</label>
+          <div class="flex gap-sm" style="flex-wrap:wrap">
+            ${transicoes.map(t => `
+              <button class="btn ${t.danger ? 'btn-danger' : 'btn-primary'} btn-sm"
+                onclick='openConcursoTransition(${JSON.stringify(id)}, ${JSON.stringify(t)})'>${escapeHtml(t.label)}</button>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${datasHist.length ? `
+        <div style="border-top:1px solid var(--border-light);padding-top:16px;margin-top:8px">
+          <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Histórico</label>
+          <div class="form-row-3" style="gap:12px">
+            ${datasHist.map(([nome, data]) => `<div><div class="text-small text-muted">${nome}</div><div style="font-weight:600">${fmtDate(data)}</div></div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      ${r.notas ? `<div style="margin-top:16px"><label class="text-small text-muted">Notas</label><div>${escapeHtml(r.notas)}</div></div>` : ''}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
-      ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openConcursoModal('${r.id}')">Editar</button>` : ''}
+      ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openConcursoModal('${id}')">Editar</button>` : ''}
     </div>
   `);
 }
 
-async function runAnalysisConcurso(id) {
+function openConcursoTransition(id, transicao) {
+  const today = new Date().toISOString().slice(0,10);
+  const extras = transicao.extras || [];
   const r = state.data.concursos.find(x => x.id === id);
-  if (!r) return;
-  const panel = $('#ia-panel-concurso');
-  panel.innerHTML = `<h4>Análise IA</h4><div class="ia-loading"><div class="spinner"></div>A analisar...</div>`;
-  try {
-    const analysis = await analyzeRecord('concurso', r);
-    await sb.from('concursos').update({
-      analise_ia: analysis,
-      analise_ia_data: new Date().toISOString()
-    }).eq('id', id);
+
+  const extrasHTML = extras.map((ex, i) => {
+    if (ex.type === 'number') {
+      const v = r?.[ex.field];
+      return `<div class="form-group"><label>${ex.label}</label><input type="number" step="0.01" class="form-control" id="cex-${i}" value="${v ?? ''}"></div>`;
+    }
+    return `<div class="form-group"><label>${ex.label}</label><input class="form-control" id="cex-${i}" value="${escapeHtml(r?.[ex.field])}"></div>`;
+  }).join('');
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${escapeHtml(transicao.label)}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-ctrans" onsubmit="event.preventDefault();return false;">
+        <div class="form-group">
+          <label>${transicao.dataLabel} <span class="required">*</span></label>
+          <input type="date" class="form-control" id="ctrans-date" value="${today}">
+        </div>
+        ${extrasHTML}
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn ${transicao.danger ? 'btn-danger' : 'btn-primary'}" id="ctrans-confirm">Confirmar</button>
+    </div>
+  `, 'sm');
+
+  $('#ctrans-confirm').onclick = async () => {
+    const dateValue = $('#ctrans-date').value;
+    if (!dateValue) { showToast('Data obrigatória', 'error'); return; }
+    const update = { estado: transicao.para, [transicao.dataField]: dateValue };
+    extras.forEach((ex, i) => {
+      const raw = $('#cex-' + i).value;
+      if (raw !== '') update[ex.field] = ex.type === 'number' ? parseFloat(raw) : raw;
+    });
+    const { error } = await sb.from('concursos').update(update).eq('id', id);
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    closeModal();
     await reloadTable('concursos');
+    renderConcursos();
     openConcursoDetail(id);
-    showToast('Análise gerada', 'success');
-  } catch (e) {
-    panel.innerHTML = `<h4>Análise IA</h4><div style="color:var(--danger)">${escapeHtml(e.message)}</div>
-      <div class="mt"><button class="btn btn-gold btn-sm" onclick="runAnalysisConcurso('${id}')">Tentar novamente</button></div>`;
-  }
+    showToast('Estado atualizado para ' + transicao.para, 'success');
+  };
 }
 
 function exportConcursos() {
-  const rows = applyFilters(state.data.concursos, state.filters.concursos,
-    ['entidade','nome','localizacao','tipo','plataforma']);
-  exportXLSX(rows, [
-    { key: 'entidade', label: 'Entidade' },
+  exportXLSX(state.data.concursos, [
     { key: 'nome', label: 'Nome' },
+    { key: 'ambito_fisc', label: 'FISC', format: v => v ? 'x' : '' },
+    { key: 'ambito_cso', label: 'CSO', format: v => v ? 'x' : '' },
+    { key: 'ambito_qual', label: 'QUAL', format: v => v ? 'x' : '' },
+    { key: 'ambito_amb', label: 'AMB', format: v => v ? 'x' : '' },
+    { key: 'ambito_proj', label: 'PROJ', format: v => v ? 'x' : '' },
+    { key: 'sigla', label: 'Sigla' },
     { key: 'localizacao', label: 'Localização' },
     { key: 'plataforma', label: 'Plataforma' },
-    { key: 'tipo', label: 'Tipo' },
-    { key: 'valor_base', label: 'Valor Base (€)' },
-    { key: 'duracao', label: 'Duração' },
-    { key: 'entrega', label: 'Entrega', format: fmtDate },
-    { key: 'status', label: 'Status' },
-    { key: 'notas', label: 'Notas' }
+    { key: 'valor_base', label: 'Valor Base' },
+    { key: 'caucao', label: 'Caução' },
+    { key: 'duracao_meses', label: 'Duração (meses)' },
+    { key: 'data', label: 'Data', format: fmtDate },
+    { key: 'estado', label: 'Estado' },
+    { key: 'valor_aceitar', label: 'Valor Aceitar' },
+    { key: 'posicao', label: 'Posição' },
+    { key: 'valor_vencedor', label: 'Valor Vencedor' },
+    { key: 'entidade', label: 'Entidade' }
   ], 'siga_concursos_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
 async function importConcursos() {
   const ok = await importXLSX('concursos', row => {
-    if (!row['Entidade'] && !row['Nome']) return null;
+    if (!row['Nome'] && !row['Nome (Short)'] && !row['Sigla']) return null;
+    const truthy = v => {
+      const s = String(v ?? '').trim().toLowerCase();
+      return s === 'x' || s === 'sim' || s === 'true' || s === '1';
+    };
     return {
-      entidade: row['Entidade'] || null,
-      nome: row['Nome'] || null,
+      nome: row['Nome'] || row['Nome (Short)'] || null,
+      ambito_fisc: truthy(row['FISC']),
+      ambito_cso: truthy(row['CSO']),
+      ambito_qual: truthy(row['QUAL']),
+      ambito_amb: truthy(row['AMB']),
+      ambito_proj: truthy(row['PROJ']),
+      sigla: row['Sigla'] || null,
       localizacao: row['Localização'] || row['Localizacao'] || null,
       plataforma: row['Plataforma'] || null,
-      tipo: row['Tipo'] || null,
-      valor_base: row['Valor Base (€)'] || row['Valor Base'] ? parseFloat(row['Valor Base (€)'] || row['Valor Base']) : null,
-      duracao: row['Duração'] || row['Duracao'] || null,
-      entrega: parseDateValue(row['Entrega']),
-      status: CONFIG.CONCURSO_STATUS.includes(row['Status']) ? row['Status'] : 'Pendente',
-      notas: row['Notas'] || null
+      valor_base: (row['Valor Base'] != null && row['Valor Base'] !== '') ? parseFloat(row['Valor Base']) : null,
+      caucao: (row['Caução'] != null && row['Caução'] !== '') ? parseFloat(row['Caução']) : null,
+      duracao_meses: (row['Duração (meses)'] != null && row['Duração (meses)'] !== '') ? parseInt(row['Duração (meses)']) : null,
+      data: parseDateValue(row['Data']),
+      estado: CONFIG.CONCURSO_ESTADOS.includes(row['Status']) ? row['Status']
+             : CONFIG.CONCURSO_ESTADOS.includes(row['Estado']) ? row['Estado']
+             : 'Aprovado',
+      valor_aceitar: (row['Valor Aceitar'] != null && row['Valor Aceitar'] !== '') ? parseFloat(row['Valor Aceitar']) : null,
+      posicao: (row['Posição'] != null && row['Posição'] !== '') ? parseInt(row['Posição']) : null,
+      valor_vencedor: (row['Valor Vencedor'] != null && row['Valor Vencedor'] !== '') ? parseFloat(row['Valor Vencedor']) : null,
+      entidade: row['Entidade'] || null
     };
   });
   if (ok) { await reloadTable('concursos'); renderConcursos(); }
 }
+
+// ---- Concursos: Financeiro (placeholder p/ custos futuros) ----
+function renderConcursoFinanceiro() {
+  $('#section-concursos').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Concursos — Financeiro</div>
+        <div class="page-subtitle">Associação de custos (em breve)</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchConcursoView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchConcursoView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchConcursoView('analise')">Análise</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="padding:48px;text-align:center;color:var(--text-muted)">
+        <div style="font-size:32px;margin-bottom:8px">💶</div>
+        <div>Associação de custos aos concursos a implementar.</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderConcursoAnalise() {
+  const data = state.data.concursos;
+  const total = data.length;
+  const aprovados = data.filter(c => c.estado !== 'Não Aprovado').length;
+  const ganhos = data.filter(c => ['Ganho','Adjudicado','Aguarda Confirmação','Não Adjudicado','Eliminados'].includes(c.estado)).length;
+  const adjudicados = data.filter(c => c.estado === 'Adjudicado').length;
+  const taxaSucesso = aprovados > 0 ? (ganhos / aprovados * 100) : 0;
+
+  const valorBaseTotal = data.reduce((s, c) => s + (Number(c.valor_base) || 0), 0);
+  const valorAceitarTotal = data.reduce((s, c) => s + (Number(c.valor_aceitar) || 0), 0);
+
+  // Distribuição por estado
+  const porEstado = {};
+  data.forEach(c => { porEstado[c.estado] = (porEstado[c.estado] || 0) + 1; });
+
+  // Por plataforma
+  const porPlataforma = {};
+  data.forEach(c => { const p = c.plataforma || '—'; porPlataforma[p] = (porPlataforma[p] || 0) + 1; });
+
+  // Por âmbito
+  const porAmbito = {};
+  CONFIG.CONCURSO_AMBITOS.forEach(a => { porAmbito[a.label] = data.filter(c => c[a.key]).length; });
+
+  $('#section-concursos').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Concursos — Análise</div>
+        <div class="page-subtitle">${total} concursos</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchConcursoView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchConcursoView('financeiro')">Financeiro</button>
+          <button class="tab-btn active" onclick="switchConcursoView('analise')">Análise</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Total concursos</div><div class="kpi-value">${total}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ganhos</div><div class="kpi-value" style="color:var(--success)">${ganhos}</div><div class="kpi-sub">de ${aprovados} aprovados</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de sucesso</div><div class="kpi-value">${taxaSucesso.toFixed(1)}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Adjudicados</div><div class="kpi-value">${adjudicados}</div></div>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:24px">
+      <div class="kpi-card"><div class="kpi-label">Valor Base acumulado</div><div class="kpi-value">${fmtCurrency(valorBaseTotal)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Valor Aceitar acumulado</div><div class="kpi-value">${fmtCurrency(valorAceitarTotal)}</div></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="card"><h4>Distribuição por estado</h4><canvas id="chart-conc-estado" height="200"></canvas></div>
+      <div class="card"><h4>Concursos por plataforma</h4><canvas id="chart-conc-plat" height="200"></canvas></div>
+    </div>
+    <div class="card">
+      <h4>Concursos por âmbito</h4><canvas id="chart-conc-ambito" height="160"></canvas>
+    </div>
+  `;
+
+  const estLabels = Object.keys(porEstado);
+  if (state.charts.concEstado) state.charts.concEstado.destroy();
+  if (estLabels.length) state.charts.concEstado = new Chart($('#chart-conc-estado'), {
+    type: 'doughnut',
+    data: { labels: estLabels, datasets: [{ data: estLabels.map(e => porEstado[e]), backgroundColor: ['#1a3a5c','#f87171','#fbbf24','#34d399','#ef4444','#22c55e','#dc2626','#94a3b8','#f59e0b'] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+  });
+
+  const platLabels = Object.keys(porPlataforma);
+  if (state.charts.concPlat) state.charts.concPlat.destroy();
+  if (platLabels.length) state.charts.concPlat = new Chart($('#chart-conc-plat'), {
+    type: 'bar',
+    data: { labels: platLabels, datasets: [{ label: 'Concursos', data: platLabels.map(p => porPlataforma[p]), backgroundColor: '#1a3a5c' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+
+  const ambLabels = Object.keys(porAmbito);
+  if (state.charts.concAmbito) state.charts.concAmbito.destroy();
+  state.charts.concAmbito = new Chart($('#chart-conc-ambito'), {
+    type: 'bar',
+    data: { labels: ambLabels, datasets: [{ label: 'Concursos', data: ambLabels.map(a => porAmbito[a]), backgroundColor: '#c9a24a' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+}
+
 
 // ============================================================
 // ACEITAR INSPECT
@@ -2015,20 +2360,6 @@ function renderInspect() {
 function switchInspectView(view) {
   state.inspectView = view;
   renderInspect();
-}
-
-function renderConcursosPreserveFocus() {
-  const el = document.activeElement;
-  const isSearch = el && el.id === 'concursos-search';
-  const pos = isSearch ? el.selectionStart : null;
-  renderConcursos();
-  if (isSearch) {
-    const newEl = document.getElementById('concursos-search');
-    if (newEl) {
-      newEl.focus();
-      if (pos !== null) newEl.setSelectionRange(pos, pos);
-    }
-  }
 }
 
 // Re-render preservando foco do input de pesquisa e posição do cursor
