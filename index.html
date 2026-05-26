@@ -817,7 +817,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.25-09h17</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.26-12h38</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -967,13 +967,16 @@ const state = {
   userRole: null,
   currentSection: 'dashboard',
   inspectView: 'listagem',
+  frotaView: 'listagem',
   data: {
     concursos: [],
     inspect: [],
     afetacoes: [],
     frota: [],
     equipamentos: [],
-    comunicacoes: []
+    comunicacoes: [],
+    frotaControlos: [],
+    frotaDespesas: []
   },
   charts: {},
   map: null,
@@ -983,7 +986,9 @@ const state = {
   },
   filters: {
     concursos: { search: '', status: '' },
-    inspect:   { search: '', estado: '' }
+    inspect:   { search: '', estado: '' },
+    frota:     { search: '', tipo: '' },
+    frotaDespesas: { viatura: '', tipo: '' }
   }
 };
 
@@ -1254,8 +1259,8 @@ async function logout() {
 
 // ---------- DATA LOADING ----------
 async function loadAll() {
-  const tables = ['concursos', 'inspect_pedidos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes'];
-  const keys = ['concursos', 'inspect', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes'];
+  const tables = ['concursos', 'inspect_pedidos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frota_controlos', 'frota_despesas'];
+  const keys = ['concursos', 'inspect', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frotaControlos', 'frotaDespesas'];
 
   const results = await Promise.all(tables.map(t =>
     sb.from(t).select('*').order('created_at', { ascending: false })
@@ -1273,7 +1278,9 @@ async function reloadTable(key) {
     afetacoes: 'afetacoes',
     frota: 'frota',
     equipamentos: 'equipamentos',
-    comunicacoes: 'comunicacoes'
+    comunicacoes: 'comunicacoes',
+    frotaControlos: 'frota_controlos',
+    frotaDespesas: 'frota_despesas'
   };
   const { data } = await sb.from(tableMap[key]).select('*').order('created_at', { ascending: false });
   state.data[key] = data || [];
@@ -1291,7 +1298,7 @@ function navigate(section) {
     concursos: renderConcursos,
     inspect: renderInspect,
     afetacoes: () => renderPlaceholder('afetacoes', 'Afetações', 'A incorporar o MCA existente. Estrutura base pronta em BD.'),
-    frota: () => renderPlaceholder('frota', 'Frota', 'Módulo em desenvolvimento. A definir campos finais.'),
+    frota: renderFrota,
     equipamentos: () => renderPlaceholder('equipamentos', 'Equipamentos', 'Módulo em desenvolvimento. Gestão de licenças e custos.'),
     comunicacoes: () => renderPlaceholder('comunicacoes', 'Comunicações', 'Módulo em desenvolvimento. Gestão de números e custos.')
   };
@@ -3579,6 +3586,808 @@ async function importInspect() {
 // ============================================================
 // PLACEHOLDER SECTIONS
 // ============================================================
+// ============================================================
+// FROTA
+// ============================================================
+function frotaCalcDerived(v) {
+  // Devolve { duracaoAnos, kmsAno, kmsMes, mesesContrato }
+  let duracaoAnos = null, kmsAno = null, kmsMes = null, mesesContrato = null;
+  if (v.inicio_contrato && v.fim_contrato) {
+    const ini = new Date(v.inicio_contrato);
+    const fim = new Date(v.fim_contrato);
+    const msDiff = fim - ini;
+    const dias = msDiff / (1000 * 60 * 60 * 24);
+    duracaoAnos = dias / 365.25;
+    mesesContrato = dias / 30.4375;
+    if (v.kms_contratados && duracaoAnos > 0) {
+      kmsAno = v.kms_contratados / duracaoAnos;
+      kmsMes = v.kms_contratados / mesesContrato;
+    }
+  }
+  return { duracaoAnos, kmsAno, kmsMes, mesesContrato };
+}
+
+function switchFrotaView(view) {
+  state.frotaView = view;
+  renderFrota();
+}
+
+function renderFrota() {
+  if (state.frotaView === 'financeiro') { renderFrotaFinanceiro(); return; }
+  if (state.frotaView === 'analise') { renderFrotaAnalise(); return; }
+  renderFrotaListagem();
+}
+
+function renderFrotaListagem() {
+  const f = state.filters.frota;
+  let data = state.data.frota;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    data = data.filter(v =>
+      (v.matricula || '').toLowerCase().includes(q) ||
+      (v.viatura || '').toLowerCase().includes(q) ||
+      (v.utilizador || '').toLowerCase().includes(q)
+    );
+  }
+  if (f.tipo) data = data.filter(v => v.tipo === f.tipo);
+
+  $('#section-frota').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Frota</div>
+        <div class="page-subtitle">${data.length} viatura(s)</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchFrotaView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchFrotaView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchFrotaView('analise')">Análise</button>
+        </div>
+        <button class="btn btn-secondary" onclick="exportFrota()">⬇ Export XLSX</button>
+        ${canEdit() ? `<button class="btn btn-gold" onclick="openFrotaModal()">+ Nova Viatura</button>` : ''}
+        ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('frota','Frota','frota')" title="Apagar tudo">🗑 Apagar tudo</button>` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="text" class="form-control search" id="frota-search" placeholder="Pesquisar matrícula, viatura, utilizador..."
+               value="${escapeHtml(f.search)}" oninput="state.filters.frota.search = this.value; renderFrotaPreserveFocus();">
+        <select class="form-control" onchange="state.filters.frota.tipo = this.value; renderFrota();">
+          <option value="" ${f.tipo===''?'selected':''}>Todos os tipos</option>
+          <option value="Própria" ${f.tipo==='Própria'?'selected':''}>Própria</option>
+          <option value="Leasing" ${f.tipo==='Leasing'?'selected':''}>Leasing</option>
+          <option value="Renting" ${f.tipo==='Renting'?'selected':''}>Renting</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="state.filters.frota={search:'',tipo:''};renderFrota();">Limpar</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Matrícula</th>
+              <th>Viatura</th>
+              <th>Tipo</th>
+              <th>Empresa</th>
+              <th>Fim Contrato</th>
+              <th class="num">Kms/mês</th>
+              <th class="num">Mensalidade</th>
+              <th>Utilizador</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.length === 0
+              ? `<tr class="empty-row"><td colspan="9">Sem viaturas</td></tr>`
+              : data.map(v => {
+                const d = frotaCalcDerived(v);
+                const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
+                return `
+                <tr class="clickable" onclick="openFrotaDetail('${v.id}')">
+                  <td><strong>${escapeHtml(v.matricula)}</strong></td>
+                  <td>${escapeHtml(v.viatura)}</td>
+                  <td>${escapeHtml(v.tipo)}</td>
+                  <td>${isContrato ? escapeHtml(v.empresa) : '—'}</td>
+                  <td>${isContrato ? fmtDate(v.fim_contrato) : '—'}</td>
+                  <td class="num">${isContrato && d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num">${isContrato ? fmtCurrency(v.mensalidade) : '—'}</td>
+                  <td>${escapeHtml(v.utilizador)}</td>
+                  <td onclick="event.stopPropagation()">
+                    <div class="actions">
+                      ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="openFrotaModal('${v.id}')" title="Editar">✎</button>` : ''}
+                      ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteFrota('${v.id}')" title="Eliminar">🗑</button>` : ''}
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderFrotaPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'frota-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderFrota();
+  if (isSearch) {
+    const newEl = document.getElementById('frota-search');
+    if (newEl) { newEl.focus(); if (pos !== null) newEl.setSelectionRange(pos, pos); }
+  }
+}
+
+function openFrotaModal(id) {
+  const v = id ? state.data.frota.find(x => x.id === id) : { tipo: 'Própria' };
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${id ? 'Editar' : 'Nova'} Viatura</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-frota" onsubmit="return false">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Matrícula <span class="required">*</span></label>
+            <input class="form-control" name="matricula" value="${escapeHtml(v.matricula)}" placeholder="00-AA-00" required>
+          </div>
+          <div class="form-group">
+            <label>Viatura</label>
+            <input class="form-control" name="viatura" value="${escapeHtml(v.viatura)}" placeholder="Marca / Modelo">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tipo</label>
+            <select class="form-control" name="tipo" id="frota-tipo" onchange="toggleFrotaContrato()">
+              <option ${v.tipo==='Própria'?'selected':''}>Própria</option>
+              <option ${v.tipo==='Leasing'?'selected':''}>Leasing</option>
+              <option ${v.tipo==='Renting'?'selected':''}>Renting</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Utilizador</label>
+            <input class="form-control" name="utilizador" value="${escapeHtml(v.utilizador)}">
+          </div>
+        </div>
+
+        <div id="frota-contrato" style="display:${v.tipo==='Própria'?'none':'block'}">
+          <div style="margin-top:8px;border-top:1px solid var(--border-light);padding-top:16px">
+            <label style="font-weight:600;color:var(--navy);display:block;margin-bottom:12px">Contrato</label>
+          </div>
+          <div class="form-group">
+            <label>Empresa</label>
+            <input class="form-control" name="empresa" value="${escapeHtml(v.empresa)}">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Início Contrato</label>
+              <input type="date" class="form-control" name="inicio_contrato" value="${v.inicio_contrato ?? ''}" oninput="updateFrotaCalc()">
+            </div>
+            <div class="form-group">
+              <label>Fim Contrato</label>
+              <input type="date" class="form-control" name="fim_contrato" value="${v.fim_contrato ?? ''}" oninput="updateFrotaCalc()">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Duração</label>
+            <input class="form-control" id="frota-duracao" value="" disabled style="background:var(--bg-muted)">
+          </div>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Kms Contratados</label>
+              <input type="number" step="1" class="form-control" name="kms_contratados" value="${v.kms_contratados ?? ''}" oninput="updateFrotaCalc()">
+            </div>
+            <div class="form-group">
+              <label>Kms / Ano</label>
+              <input class="form-control" id="frota-kmsano" value="" disabled style="background:var(--bg-muted)">
+            </div>
+            <div class="form-group">
+              <label>Kms / Mês</label>
+              <input class="form-control" id="frota-kmsmes" value="" disabled style="background:var(--bg-muted)">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Valor Km + (€)</label>
+              <input type="number" step="0.0001" class="form-control" name="valor_km_mais" value="${v.valor_km_mais ?? ''}" placeholder="custo por km a mais">
+            </div>
+            <div class="form-group">
+              <label>Valor Km − (€)</label>
+              <input type="number" step="0.0001" class="form-control" name="valor_km_menos" value="${v.valor_km_menos ?? ''}" placeholder="crédito por km a menos">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Mensalidade (€)</label>
+              <input type="number" step="0.01" class="form-control" name="mensalidade" value="${v.mensalidade ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Mensalidade GPS (€)</label>
+              <input type="number" step="0.01" class="form-control" name="mensalidade_gps" value="${v.mensalidade_gps ?? ''}">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea class="form-control" name="notas" rows="2" style="min-height:60px">${escapeHtml(v.notas)}</textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveFrota('${id || ''}')">${id ? 'Atualizar' : 'Criar'}</button>
+    </div>
+  `);
+
+  updateFrotaCalc();
+}
+
+function toggleFrotaContrato() {
+  const tipo = $('#frota-tipo').value;
+  $('#frota-contrato').style.display = tipo === 'Própria' ? 'none' : 'block';
+}
+
+function updateFrotaCalc() {
+  const form = $('#form-frota');
+  if (!form) return;
+  const ini = form.inicio_contrato?.value;
+  const fim = form.fim_contrato?.value;
+  const kms = parseFloat(form.kms_contratados?.value);
+  const d = frotaCalcDerived({ inicio_contrato: ini, fim_contrato: fim, kms_contratados: kms });
+  const durEl = $('#frota-duracao'), anoEl = $('#frota-kmsano'), mesEl = $('#frota-kmsmes');
+  if (durEl) durEl.value = d.duracaoAnos ? d.duracaoAnos.toFixed(1) + ' anos (' + Math.round(d.mesesContrato) + ' meses)' : '—';
+  if (anoEl) anoEl.value = d.kmsAno ? Math.round(d.kmsAno).toLocaleString('pt-PT') + ' km' : '—';
+  if (mesEl) mesEl.value = d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') + ' km' : '—';
+}
+
+async function saveFrota(id) {
+  const form = $('#form-frota');
+  const rec = {};
+  new FormData(form).forEach((val, key) => { rec[key] = val === '' ? null : val; });
+  if (!rec.matricula) { showToast('Matrícula obrigatória', 'error'); return; }
+
+  ['kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps'].forEach(k => {
+    if (rec[k]) rec[k] = parseFloat(rec[k]);
+  });
+
+  // Se própria, limpa campos de contrato
+  if (rec.tipo === 'Própria') {
+    ['empresa','inicio_contrato','fim_contrato','kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps'].forEach(k => rec[k] = null);
+  }
+
+  const { error } = id
+    ? await sb.from('frota').update(rec).eq('id', id)
+    : await sb.from('frota').insert(rec);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  closeModal();
+  await reloadTable('frota');
+  renderFrota();
+  showToast(id ? 'Viatura atualizada' : 'Viatura criada', 'success');
+}
+
+async function deleteFrota(id) {
+  if (!confirm('Eliminar esta viatura? Os controlos de kms e despesas associados também serão eliminados.')) return;
+  const { error } = await sb.from('frota').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await Promise.all([reloadTable('frota'), reloadTable('frotaControlos'), reloadTable('frotaDespesas')]);
+  renderFrota();
+  showToast('Viatura eliminada', 'success');
+}
+
+function openFrotaDetail(id) {
+  const v = state.data.frota.find(x => x.id === id);
+  if (!v) return;
+  const d = frotaCalcDerived(v);
+  const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
+  const controlos = state.data.frotaControlos
+    .filter(c => c.viatura_id === id)
+    .sort((a, b) => new Date(b.data_controlo) - new Date(a.data_controlo));
+
+  showModal(`
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</div>
+        <div class="text-small text-muted">${escapeHtml(v.tipo)}${v.utilizador ? ' · ' + escapeHtml(v.utilizador) : ''}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row-3 mb-lg">
+        <div><label class="text-small text-muted">Empresa</label><div>${isContrato ? (v.empresa ? escapeHtml(v.empresa) : '—') : '—'}</div></div>
+        <div><label class="text-small text-muted">Início</label><div>${isContrato ? fmtDate(v.inicio_contrato) : '—'}</div></div>
+        <div><label class="text-small text-muted">Fim</label><div>${isContrato ? fmtDate(v.fim_contrato) : '—'}</div></div>
+        ${isContrato ? `
+          <div><label class="text-small text-muted">Kms contratados</label><div>${v.kms_contratados ? v.kms_contratados.toLocaleString('pt-PT') : '—'}</div></div>
+          <div><label class="text-small text-muted">Kms/mês</label><div>${d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') : '—'}</div></div>
+          <div><label class="text-small text-muted">Mensalidade</label><div>${fmtCurrency(v.mensalidade)}${v.mensalidade_gps ? ' + ' + fmtCurrency(v.mensalidade_gps) + ' GPS' : ''}</div></div>
+        ` : ''}
+      </div>
+
+      ${isContrato ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border-light);padding-top:16px;margin-bottom:12px">
+          <label style="font-weight:600;color:var(--navy)">Controlos de Kms</label>
+          ${canEdit() ? `<button class="btn btn-gold btn-sm" onclick="openControloModal('${id}')">+ Novo Controlo</button>` : ''}
+        </div>
+        ${controlos.length === 0 ? `<div class="text-small text-muted">Ainda sem controlos registados.</div>` : `
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th class="num">Kms atuais</th>
+                  <th class="num">Kms previstos</th>
+                  <th class="num">Desvio</th>
+                  <th class="num">Custo momento</th>
+                  <th class="num">Kms fim (est.)</th>
+                  <th class="num">Custo fim (est.)</th>
+                  ${isAdmin() ? '<th></th>' : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${controlos.map(c => `
+                  <tr>
+                    <td>${fmtDate(c.data_controlo)}</td>
+                    <td class="num">${c.kms_atuais != null ? c.kms_atuais.toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num">${c.kms_previstos != null ? Math.round(c.kms_previstos).toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'}">${c.desvio != null ? (c.desvio > 0 ? '+' : '') + Math.round(c.desvio).toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num">${fmtCurrency(c.custo_momento)}</td>
+                    <td class="num">${c.kms_extrapolados != null ? Math.round(c.kms_extrapolados).toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num" style="color:${c.custo_extrapolado > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtCurrency(c.custo_extrapolado)}</td>
+                    ${isAdmin() ? `<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteControlo('${c.id}','${id}')">🗑</button></td>` : ''}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      ` : `<div class="text-small text-muted">Viatura própria — sem controlo de kms.</div>`}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
+      ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openFrotaModal('${id}')">Editar</button>` : ''}
+    </div>
+  `);
+}
+
+function openControloModal(viaturaId) {
+  const v = state.data.frota.find(x => x.id === viaturaId);
+  if (!v) return;
+  const today = new Date().toISOString().slice(0,10);
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">Controlo de Kms — ${escapeHtml(v.matricula)}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-controlo" onsubmit="return false">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data do controlo <span class="required">*</span></label>
+            <input type="date" class="form-control" id="ctrl-data" value="${today}">
+          </div>
+          <div class="form-group">
+            <label>Kms atuais <span class="required">*</span></label>
+            <input type="number" step="1" class="form-control" id="ctrl-kms" placeholder="ex: 23500">
+          </div>
+        </div>
+        <div id="ctrl-preview" class="text-small text-muted" style="margin-top:8px"></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="ctrl-confirm">Registar</button>
+    </div>
+  `, 'sm');
+
+  const calc = () => {
+    const data = $('#ctrl-data').value;
+    const kms = parseFloat($('#ctrl-kms').value);
+    const r = computeControlo(v, data, kms);
+    if (!r) { $('#ctrl-preview').innerHTML = ''; return; }
+    $('#ctrl-preview').innerHTML = `
+      Kms previstos: <strong>${Math.round(r.kms_previstos).toLocaleString('pt-PT')}</strong> ·
+      Desvio: <strong style="color:${r.desvio>0?'var(--danger)':'var(--success)'}">${r.desvio>0?'+':''}${Math.round(r.desvio).toLocaleString('pt-PT')}</strong><br>
+      Custo no momento: <strong>${fmtCurrency(r.custo_momento)}</strong><br>
+      Projeção fim do contrato: <strong>${Math.round(r.kms_extrapolados).toLocaleString('pt-PT')} km</strong> ·
+      Custo estimado: <strong style="color:${r.custo_extrapolado>0?'var(--danger)':'var(--success)'}">${fmtCurrency(r.custo_extrapolado)}</strong>`;
+  };
+  $('#ctrl-data').addEventListener('input', calc);
+  $('#ctrl-kms').addEventListener('input', calc);
+
+  $('#ctrl-confirm').onclick = async () => {
+    const data = $('#ctrl-data').value;
+    const kms = parseFloat($('#ctrl-kms').value);
+    if (!data || isNaN(kms)) { showToast('Preenche data e kms', 'error'); return; }
+    const r = computeControlo(v, data, kms);
+    const { error } = await sb.from('frota_controlos').insert({
+      viatura_id: viaturaId,
+      data_controlo: data,
+      kms_atuais: kms,
+      kms_previstos: r?.kms_previstos ?? null,
+      desvio: r?.desvio ?? null,
+      custo_momento: r?.custo_momento ?? null,
+      kms_extrapolados: r?.kms_extrapolados ?? null,
+      custo_extrapolado: r?.custo_extrapolado ?? null
+    });
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    closeModal();
+    await reloadTable('frotaControlos');
+    openFrotaDetail(viaturaId);
+    showToast('Controlo registado', 'success');
+  };
+}
+
+// Calcula métricas de um controlo de kms
+function computeControlo(v, dataControlo, kmsAtuais) {
+  if (!v.inicio_contrato || !v.fim_contrato || !v.kms_contratados || isNaN(kmsAtuais)) return null;
+  const ini = new Date(v.inicio_contrato);
+  const fim = new Date(v.fim_contrato);
+  const dataCtrl = new Date(dataControlo);
+
+  const totalDias = (fim - ini) / (1000*60*60*24);
+  const decorridoDias = (dataCtrl - ini) / (1000*60*60*24);
+  if (decorridoDias <= 0 || totalDias <= 0) return null;
+
+  // Kms previstos proporcional ao tempo decorrido
+  const kms_previstos = v.kms_contratados * (decorridoDias / totalDias);
+  const desvio = kmsAtuais - kms_previstos;
+
+  // Custo no momento: desvio positivo usa km+, negativo usa km-
+  const taxaMomento = desvio > 0 ? (v.valor_km_mais || 0) : (v.valor_km_menos || 0);
+  const custo_momento = desvio * taxaMomento;
+
+  // Extrapolação (regra de 3): se em decorridoDias fez kmsAtuais, em totalDias faz...
+  const kms_extrapolados = kmsAtuais * (totalDias / decorridoDias);
+  const desvioFim = kms_extrapolados - v.kms_contratados;
+  const taxaFim = desvioFim > 0 ? (v.valor_km_mais || 0) : (v.valor_km_menos || 0);
+  const custo_extrapolado = desvioFim * taxaFim;
+
+  return { kms_previstos, desvio, custo_momento, kms_extrapolados, custo_extrapolado };
+}
+
+async function deleteControlo(id, viaturaId) {
+  if (!confirm('Eliminar este controlo?')) return;
+  const { error } = await sb.from('frota_controlos').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('frotaControlos');
+  openFrotaDetail(viaturaId);
+  showToast('Controlo eliminado', 'success');
+}
+
+const FROTA_TIPOS_DESPESA = ['Portagens', 'Gasóleo', 'Eletricidade', 'Multas', 'Via Verde', 'Seguro', 'Manutenção', 'Outro'];
+
+function renderFrotaFinanceiro() {
+  const f = state.filters.frotaDespesas;
+  let desp = state.data.frotaDespesas;
+  if (f.viatura) desp = desp.filter(d => d.viatura_id === f.viatura);
+  if (f.tipo) desp = desp.filter(d => d.tipo === f.tipo);
+  desp = [...desp].sort((a, b) => new Date(b.data) - new Date(a.data));
+
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+  const total = desp.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
+  $('#section-frota').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Frota — Financeiro</div>
+        <div class="page-subtitle">${desp.length} despesa(s) · ${fmtCurrency(total)}</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchFrotaView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchFrotaView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchFrotaView('analise')">Análise</button>
+        </div>
+        <button class="btn btn-secondary" onclick="exportFrotaDespesas()">⬇ Export XLSX</button>
+        ${canEdit() ? `<button class="btn btn-gold" onclick="openDespesaModal()">+ Nova Despesa</button>` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <select class="form-control" onchange="state.filters.frotaDespesas.viatura = this.value; renderFrota();">
+          <option value="">Todas as viaturas</option>
+          ${state.data.frota.map(v => `<option value="${v.id}" ${f.viatura===v.id?'selected':''}>${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</option>`).join('')}
+        </select>
+        <select class="form-control" onchange="state.filters.frotaDespesas.tipo = this.value; renderFrota();">
+          <option value="">Todos os tipos</option>
+          ${FROTA_TIPOS_DESPESA.map(t => `<option ${f.tipo===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="state.filters.frotaDespesas={viatura:'',tipo:''};renderFrota();">Limpar</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Viatura</th>
+              <th>Tipo</th>
+              <th class="num">Valor</th>
+              <th>Notas</th>
+              ${canEdit() ? '<th></th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${desp.length === 0
+              ? `<tr class="empty-row"><td colspan="6">Sem despesas</td></tr>`
+              : desp.map(d => {
+                const v = vmap[d.viatura_id];
+                return `
+                <tr>
+                  <td>${fmtDate(d.data)}</td>
+                  <td>${v ? escapeHtml(v.matricula) : '—'}</td>
+                  <td>${escapeHtml(d.tipo)}</td>
+                  <td class="num">${fmtCurrency(d.valor)}</td>
+                  <td>${escapeHtml(d.notas)}</td>
+                  ${canEdit() ? `<td onclick="event.stopPropagation()">
+                    <button class="btn btn-ghost btn-sm" onclick="openDespesaModal('${d.id}')" title="Editar">✎</button>
+                    ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteDespesa('${d.id}')">🗑</button>` : ''}
+                  </td>` : ''}
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function openDespesaModal(id) {
+  const d = id ? state.data.frotaDespesas.find(x => x.id === id) : { data: new Date().toISOString().slice(0,10) };
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">${id ? 'Editar' : 'Nova'} Despesa</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-despesa" onsubmit="return false">
+        <div class="form-group">
+          <label>Viatura <span class="required">*</span></label>
+          <select class="form-control" name="viatura_id">
+            <option value="">Selecionar...</option>
+            ${state.data.frota.map(v => `<option value="${v.id}" ${d.viatura_id===v.id?'selected':''}>${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data <span class="required">*</span></label>
+            <input type="date" class="form-control" name="data" value="${d.data ?? ''}">
+          </div>
+          <div class="form-group">
+            <label>Tipo</label>
+            <select class="form-control" name="tipo">
+              ${FROTA_TIPOS_DESPESA.map(t => `<option ${d.tipo===t?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Valor (€) <span class="required">*</span></label>
+          <input type="number" step="0.01" class="form-control" name="valor" value="${d.valor ?? ''}">
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <input class="form-control" name="notas" value="${escapeHtml(d.notas)}">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveDespesa('${id || ''}')">${id ? 'Atualizar' : 'Criar'}</button>
+    </div>
+  `, 'sm');
+}
+
+async function saveDespesa(id) {
+  const form = $('#form-despesa');
+  const rec = {};
+  new FormData(form).forEach((val, key) => { rec[key] = val === '' ? null : val; });
+  if (!rec.viatura_id) { showToast('Seleciona a viatura', 'error'); return; }
+  if (!rec.data) { showToast('Data obrigatória', 'error'); return; }
+  if (!rec.valor) { showToast('Valor obrigatório', 'error'); return; }
+  rec.valor = parseFloat(rec.valor);
+
+  const { error } = id
+    ? await sb.from('frota_despesas').update(rec).eq('id', id)
+    : await sb.from('frota_despesas').insert(rec);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  closeModal();
+  await reloadTable('frotaDespesas');
+  renderFrota();
+  showToast(id ? 'Despesa atualizada' : 'Despesa criada', 'success');
+}
+
+async function deleteDespesa(id) {
+  if (!confirm('Eliminar esta despesa?')) return;
+  const { error } = await sb.from('frota_despesas').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('frotaDespesas');
+  renderFrota();
+  showToast('Despesa eliminada', 'success');
+}
+
+function renderFrotaAnalise() {
+  const viaturas = state.data.frota;
+  const desp = state.data.frotaDespesas;
+  const controlos = state.data.frotaControlos;
+
+  // Custos fixos mensais (mensalidade + GPS) das viaturas em contrato
+  const custoMensalFixo = viaturas.reduce((s, v) =>
+    s + (Number(v.mensalidade) || 0) + (Number(v.mensalidade_gps) || 0), 0);
+
+  // Total de despesas
+  const totalDespesas = desp.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
+  // Despesas por tipo
+  const porTipo = {};
+  desp.forEach(d => {
+    const t = d.tipo || 'Outro';
+    porTipo[t] = (porTipo[t] || 0) + (Number(d.valor) || 0);
+  });
+
+  // Despesas por viatura
+  const vmap = {};
+  viaturas.forEach(v => vmap[v.id] = v);
+  const porViatura = {};
+  desp.forEach(d => {
+    const key = d.viatura_id;
+    porViatura[key] = (porViatura[key] || 0) + (Number(d.valor) || 0);
+  });
+
+  // Último controlo por viatura — risco de penalização
+  const ultimoControlo = {};
+  controlos.forEach(c => {
+    if (!ultimoControlo[c.viatura_id] || new Date(c.data_controlo) > new Date(ultimoControlo[c.viatura_id].data_controlo)) {
+      ultimoControlo[c.viatura_id] = c;
+    }
+  });
+  const riscoPenalizacao = Object.values(ultimoControlo).reduce((s, c) => s + (Number(c.custo_extrapolado) > 0 ? Number(c.custo_extrapolado) : 0), 0);
+
+  $('#section-frota').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Frota — Análise</div>
+        <div class="page-subtitle">${viaturas.length} viaturas</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchFrotaView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchFrotaView('financeiro')">Financeiro</button>
+          <button class="tab-btn active" onclick="switchFrotaView('analise')">Análise</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Custo fixo mensal</div>
+        <div class="kpi-value">${fmtCurrency(custoMensalFixo)}</div>
+        <div class="kpi-sub">mensalidades + GPS</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total despesas</div>
+        <div class="kpi-value">${fmtCurrency(totalDespesas)}</div>
+        <div class="kpi-sub">${desp.length} registos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Risco penalização kms</div>
+        <div class="kpi-value" style="color:${riscoPenalizacao > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(riscoPenalizacao)}</div>
+        <div class="kpi-sub">projeção fim contratos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Viaturas em contrato</div>
+        <div class="kpi-value">${viaturas.filter(v => v.tipo !== 'Própria').length}</div>
+        <div class="kpi-sub">leasing + renting</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <h4>Despesas por tipo</h4>
+        <canvas id="chart-frota-tipo" height="200"></canvas>
+      </div>
+      <div class="card">
+        <h4>Despesas por viatura</h4>
+        <canvas id="chart-frota-viatura" height="200"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>Resumo por viatura</h4>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Matrícula</th>
+              <th>Tipo</th>
+              <th class="num">Custo fixo/mês</th>
+              <th class="num">Despesas acumuladas</th>
+              <th class="num">Custo fim contrato (est.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${viaturas.map(v => {
+              const uc = ultimoControlo[v.id];
+              return `
+              <tr>
+                <td><strong>${escapeHtml(v.matricula)}</strong></td>
+                <td>${escapeHtml(v.tipo)}</td>
+                <td class="num">${v.tipo !== 'Própria' ? fmtCurrency((Number(v.mensalidade)||0)+(Number(v.mensalidade_gps)||0)) : '—'}</td>
+                <td class="num">${fmtCurrency(porViatura[v.id] || 0)}</td>
+                <td class="num" style="${uc && uc.custo_extrapolado ? `color:${uc.custo_extrapolado>0?'var(--danger)':'var(--success)'}` : ''}">${uc ? fmtCurrency(uc.custo_extrapolado) : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Gráficos
+  const tipoLabels = Object.keys(porTipo);
+  const tipoData = tipoLabels.map(t => porTipo[t]);
+  if (state.charts.frotaTipo) state.charts.frotaTipo.destroy();
+  if (tipoLabels.length) {
+    state.charts.frotaTipo = new Chart($('#chart-frota-tipo'), {
+      type: 'doughnut',
+      data: { labels: tipoLabels, datasets: [{ data: tipoData, backgroundColor: ['#1a3a5c','#c9a24a','#0ea5e9','#f87171','#34d399','#a78bfa','#fb923c','#94a3b8'] }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+    });
+  }
+
+  const viatLabels = Object.keys(porViatura).map(id => vmap[id]?.matricula || '—');
+  const viatData = Object.keys(porViatura).map(id => porViatura[id]);
+  if (state.charts.frotaViatura) state.charts.frotaViatura.destroy();
+  if (viatLabels.length) {
+    state.charts.frotaViatura = new Chart($('#chart-frota-viatura'), {
+      type: 'bar',
+      data: { labels: viatLabels, datasets: [{ label: 'Despesas (€)', data: viatData, backgroundColor: '#1a3a5c' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+  }
+}
+
+function exportFrota() {
+  exportXLSX(state.data.frota, [
+    { key: 'matricula', label: 'Matrícula' },
+    { key: 'viatura', label: 'Viatura' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'empresa', label: 'Empresa' },
+    { key: 'inicio_contrato', label: 'Início Contrato', format: fmtDate },
+    { key: 'fim_contrato', label: 'Fim Contrato', format: fmtDate },
+    { key: 'kms_contratados', label: 'Kms Contratados' },
+    { key: 'valor_km_mais', label: 'Valor Km+ (€)' },
+    { key: 'valor_km_menos', label: 'Valor Km- (€)' },
+    { key: 'mensalidade', label: 'Mensalidade (€)' },
+    { key: 'mensalidade_gps', label: 'Mensalidade GPS (€)' },
+    { key: 'utilizador', label: 'Utilizador' }
+  ], 'siga_frota_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+function exportFrotaDespesas() {
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+  const rows = state.data.frotaDespesas.map(d => ({
+    ...d,
+    matricula: vmap[d.viatura_id]?.matricula || '',
+    viatura_nome: vmap[d.viatura_id]?.viatura || ''
+  }));
+  exportXLSX(rows, [
+    { key: 'data', label: 'Data', format: fmtDate },
+    { key: 'matricula', label: 'Matrícula' },
+    { key: 'viatura_nome', label: 'Viatura' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'valor', label: 'Valor (€)' },
+    { key: 'notas', label: 'Notas' }
+  ], 'siga_frota_despesas_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
 function renderPlaceholder(key, title, message) {
   const iconMap = {
     afetacoes: '📊',
