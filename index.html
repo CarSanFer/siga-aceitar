@@ -824,7 +824,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.26-15h53</span>
+          <span class="app-version" title="Versão da aplicação">v2026.05.26-23h52</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -890,7 +890,17 @@ const CONFIG = {
   // Workflow do Resultado do concurso
   CONCURSO_WORKFLOW: {
     'Aprovado': [
-      { para: 'Aguarda Resultado', label: 'Marcar Aguarda Resultado', dataField: 'data_aguarda_resultado', dataLabel: 'Data',
+      { para: 'Aguarda Resultado', label: 'Aguarda Resultado', dataField: 'data_aguarda_resultado', dataLabel: 'Data',
+        extras: [
+          { field: 'valor_aceitar', label: 'Valor Aceitar (€)', type: 'number' },
+          { field: 'posicao', label: 'Posição', type: 'number' }
+        ] },
+      { para: 'Ganho', label: 'Ganho (prelim.)', dataField: 'data_ganho', dataLabel: 'Data',
+        extras: [
+          { field: 'valor_aceitar', label: 'Valor Aceitar (€)', type: 'number' },
+          { field: 'posicao', label: 'Posição', type: 'number' }
+        ] },
+      { para: 'Perdido', label: 'Perdido (prelim.)', dataField: 'data_perdido', dataLabel: 'Data', danger: true,
         extras: [
           { field: 'valor_aceitar', label: 'Valor Aceitar (€)', type: 'number' },
           { field: 'posicao', label: 'Posição', type: 'number' }
@@ -898,12 +908,8 @@ const CONFIG = {
     ],
     'Não Aprovado': [],
     'Aguarda Resultado': [
-      { para: 'Ganho', label: 'Marcar Ganho', dataField: 'data_ganho', dataLabel: 'Data' },
-      { para: 'Perdido', label: 'Marcar Perdido', dataField: 'data_perdido', dataLabel: 'Data', danger: true,
-        extras: [
-          { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
-          { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
-        ] }
+      { para: 'Ganho', label: 'Ganho (prelim.)', dataField: 'data_ganho', dataLabel: 'Data' },
+      { para: 'Perdido', label: 'Perdido (prelim.)', dataField: 'data_perdido', dataLabel: 'Data', danger: true }
     ],
     'Ganho': [
       { para: 'Adjudicado', label: 'Adjudicado', dataField: 'data_adjudicado', dataLabel: 'Data' },
@@ -912,25 +918,35 @@ const CONFIG = {
           { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
           { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
         ] },
-      { para: 'Eliminados', label: 'Eliminados', dataField: 'data_eliminados', dataLabel: 'Data', danger: true },
+      { para: 'Eliminado', label: 'Eliminado', dataField: 'data_eliminado', dataLabel: 'Data', danger: true },
       { para: 'Aguarda Confirmação', label: 'Aguarda Confirmação', dataField: 'data_aguarda_confirmacao', dataLabel: 'Data' }
     ],
-    'Perdido': [],
+    'Perdido': [
+      { para: 'Adjudicado', label: 'Adjudicado', dataField: 'data_adjudicado', dataLabel: 'Data' },
+      { para: 'Não Adjudicado', label: 'Não Adjudicado', dataField: 'data_nao_adjudicado', dataLabel: 'Data', danger: true,
+        extras: [
+          { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
+          { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
+        ] },
+      { para: 'Eliminado', label: 'Eliminado', dataField: 'data_eliminado', dataLabel: 'Data', danger: true },
+      { para: 'Aguarda Confirmação', label: 'Aguarda Confirmação', dataField: 'data_aguarda_confirmacao', dataLabel: 'Data' }
+    ],
     'Adjudicado': [],
     'Não Adjudicado': [],
-    'Eliminados': [],
+    'Eliminado': [],
     'Aguarda Confirmação': [
       { para: 'Adjudicado', label: 'Adjudicado', dataField: 'data_adjudicado', dataLabel: 'Data' },
       { para: 'Não Adjudicado', label: 'Não Adjudicado', dataField: 'data_nao_adjudicado', dataLabel: 'Data', danger: true,
         extras: [
           { field: 'valor_vencedor', label: 'Valor Vencedor (€)', type: 'number' },
           { field: 'entidade', label: 'Entidade Vencedora', type: 'text' }
-        ] }
+        ] },
+      { para: 'Eliminado', label: 'Eliminado', dataField: 'data_eliminado', dataLabel: 'Data', danger: true }
     ]
   },
   CONCURSO_ESTADOS: [
     'Aprovado', 'Não Aprovado', 'Aguarda Resultado', 'Ganho', 'Perdido',
-    'Adjudicado', 'Não Adjudicado', 'Eliminados', 'Aguarda Confirmação'
+    'Adjudicado', 'Não Adjudicado', 'Eliminado', 'Aguarda Confirmação'
   ],
 
   INSPECT_ESTADOS: [
@@ -1796,7 +1812,7 @@ function openConcursoModal(id) {
     ['Perdido', r.data_perdido],
     ['Adjudicado', r.data_adjudicado],
     ['Não Adjudicado', r.data_nao_adjudicado],
-    ['Eliminados', r.data_eliminados],
+    ['Eliminado', r.data_eliminado],
     ['Aguarda Confirmação', r.data_aguarda_confirmacao]
   ].filter(([,d]) => d);
 
@@ -1899,9 +1915,19 @@ function openConcursoModal(id) {
               <input type="number" step="0.01" class="form-control" name="valor_vencedor" value="${r.valor_vencedor ?? ''}">
             </div>
           </div>
-          <div class="form-group">
-            <label>Entidade Vencedora</label>
-            <input class="form-control" name="entidade" value="${escapeHtml(r.entidade)}">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Entidade Vencedora</label>
+              <input class="form-control" name="entidade" value="${escapeHtml(r.entidade)}">
+            </div>
+            <div class="form-group">
+              <label>Rel. Preliminar</label>
+              <select class="form-control" name="rel_preliminar">
+                <option value="">—</option>
+                <option ${r.rel_preliminar==='Ganho'?'selected':''}>Ganho</option>
+                <option ${r.rel_preliminar==='Perdido'?'selected':''}>Perdido</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1970,7 +1996,7 @@ function openConcursoDetail(id) {
     ['Perdido', r.data_perdido],
     ['Adjudicado', r.data_adjudicado],
     ['Não Adjudicado', r.data_nao_adjudicado],
-    ['Eliminados', r.data_eliminados],
+    ['Eliminado', r.data_eliminado],
     ['Aguarda Confirmação', r.data_aguarda_confirmacao]
   ].filter(([,d]) => d);
 
@@ -1994,6 +2020,7 @@ function openConcursoDetail(id) {
         <div><label class="text-small text-muted">Posição</label><div>${r.posicao != null ? r.posicao : '—'}</div></div>
         <div><label class="text-small text-muted">Valor Vencedor</label><div>${fmtCurrency(r.valor_vencedor)}</div></div>
         <div><label class="text-small text-muted">Entidade Vencedora</label><div>${escapeHtml(r.entidade) || '—'}</div></div>
+        <div><label class="text-small text-muted">Rel. Preliminar</label><div>${r.rel_preliminar ? badge(r.rel_preliminar) : '—'}</div></div>
         <div><label class="text-small text-muted">Data</label><div>${fmtDate(r.data)}</div></div>
       </div>
 
@@ -2068,6 +2095,9 @@ function openConcursoTransition(id, transicao) {
       const raw = $('#cex-' + i).value;
       if (raw !== '') update[ex.field] = ex.type === 'number' ? parseFloat(raw) : raw;
     });
+    // Guardar resultado preliminar quando se marca Ganho/Perdido
+    if (transicao.para === 'Ganho') { update.rel_preliminar = 'Ganho'; update.data_rel_preliminar = dateValue; }
+    if (transicao.para === 'Perdido') { update.rel_preliminar = 'Perdido'; update.data_rel_preliminar = dateValue; }
     const { error } = await sb.from('concursos').update(update).eq('id', id);
     if (error) { showToast('Erro: ' + error.message, 'error'); return; }
     closeModal();
@@ -2094,6 +2124,7 @@ function exportConcursos() {
     { key: 'duracao_meses', label: 'Duração (meses)' },
     { key: 'data', label: 'Data', format: fmtDate },
     { key: 'estado', label: 'Estado' },
+    { key: 'rel_preliminar', label: 'Rel. Preliminar' },
     { key: 'valor_aceitar', label: 'Valor Aceitar' },
     { key: 'posicao', label: 'Posição' },
     { key: 'valor_vencedor', label: 'Valor Vencedor' },
@@ -2163,7 +2194,7 @@ function renderConcursoAnalise() {
   const data = state.data.concursos;
   const total = data.length;
   const aprovados = data.filter(c => c.estado !== 'Não Aprovado').length;
-  const ganhos = data.filter(c => ['Ganho','Adjudicado','Aguarda Confirmação','Não Adjudicado','Eliminados'].includes(c.estado)).length;
+  const ganhos = data.filter(c => ['Ganho','Perdido','Adjudicado','Aguarda Confirmação','Não Adjudicado','Eliminado'].includes(c.estado)).length;
   const adjudicados = data.filter(c => c.estado === 'Adjudicado').length;
   const taxaSucesso = aprovados > 0 ? (ganhos / aprovados * 100) : 0;
 
