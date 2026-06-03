@@ -824,7 +824,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.05.26-23h52</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.03-07h52</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -4174,6 +4174,31 @@ function openFrotaModal(id) {
           </div>
         </div>
 
+        <div style="margin-top:8px;border-top:1px solid var(--border-light);padding-top:16px">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Seguro (€)</label>
+              <input type="number" step="0.01" class="form-control" name="seguro_valor" value="${v.seguro_valor ?? ''}">
+            </div>
+            <div class="form-group">
+              <label>Periodicidade</label>
+              <select class="form-control" name="seguro_periodicidade">
+                <option value="">—</option>
+                <option ${v.seguro_periodicidade==='Anual'?'selected':''}>Anual</option>
+                <option ${v.seguro_periodicidade==='Semestral'?'selected':''}>Semestral</option>
+                <option ${v.seguro_periodicidade==='Trimestral'?'selected':''}>Trimestral</option>
+                <option ${v.seguro_periodicidade==='Mensal'?'selected':''}>Mensal</option>
+                <option ${v.seguro_periodicidade==='Outro'?'selected':''}>Outro</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Observações</label>
+          <textarea class="form-control" name="observacoes" rows="3" style="min-height:80px">${escapeHtml(v.observacoes)}</textarea>
+        </div>
+
         <div class="form-group">
           <label>Notas</label>
           <textarea class="form-control" name="notas" rows="2" style="min-height:60px">${escapeHtml(v.notas)}</textarea>
@@ -4184,7 +4209,7 @@ function openFrotaModal(id) {
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveFrota('${id || ''}')">${id ? 'Atualizar' : 'Criar'}</button>
     </div>
-  `);
+  `, 'lg');
 
   updateFrotaCalc();
 }
@@ -4213,7 +4238,7 @@ async function saveFrota(id) {
   new FormData(form).forEach((val, key) => { rec[key] = val === '' ? null : val; });
   if (!rec.matricula) { showToast('Matrícula obrigatória', 'error'); return; }
 
-  ['kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps'].forEach(k => {
+  ['kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps','seguro_valor'].forEach(k => {
     if (rec[k]) rec[k] = parseFloat(rec[k]);
   });
 
@@ -4268,7 +4293,15 @@ function openFrotaDetail(id) {
           <div><label class="text-small text-muted">Kms/mês</label><div>${d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') : '—'}</div></div>
           <div><label class="text-small text-muted">Mensalidade</label><div>${fmtCurrency(v.mensalidade)}${v.mensalidade_gps ? ' + ' + fmtCurrency(v.mensalidade_gps) + ' GPS' : ''}</div></div>
         ` : ''}
+        <div><label class="text-small text-muted">Seguro</label><div>${v.seguro_valor ? fmtCurrency(v.seguro_valor) + (v.seguro_periodicidade ? ' / ' + escapeHtml(v.seguro_periodicidade) : '') : '—'}</div></div>
       </div>
+
+      ${v.observacoes ? `
+        <div class="mb-lg">
+          <label class="text-small text-muted">Observações</label>
+          <div style="white-space:pre-wrap">${escapeHtml(v.observacoes)}</div>
+        </div>
+      ` : ''}
 
       ${isContrato ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border-light);padding-top:16px;margin-bottom:12px">
@@ -4313,7 +4346,7 @@ function openFrotaDetail(id) {
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
       ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openFrotaModal('${id}')">Editar</button>` : ''}
     </div>
-  `);
+  `, 'lg');
 }
 
 function openControloModal(viaturaId) {
@@ -4728,7 +4761,10 @@ function exportFrota() {
     { key: 'valor_km_menos', label: 'Valor Km- (€)' },
     { key: 'mensalidade', label: 'Mensalidade (€)' },
     { key: 'mensalidade_gps', label: 'Mensalidade GPS (€)' },
-    { key: 'utilizador', label: 'Utilizador' }
+    { key: 'seguro_valor', label: 'Seguro (€)' },
+    { key: 'seguro_periodicidade', label: 'Periodicidade Seguro' },
+    { key: 'utilizador', label: 'Utilizador' },
+    { key: 'observacoes', label: 'Observações' }
   ], 'siga_frota_' + new Date().toISOString().slice(0,10) + '.xlsx');
 }
 
