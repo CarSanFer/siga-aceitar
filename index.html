@@ -824,7 +824,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.03-07h52</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.05-13h24</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2193,31 +2193,129 @@ function renderConcursoFinanceiro() {
 function renderConcursoAnalise() {
   const data = state.data.concursos;
   const total = data.length;
-  const aprovados = data.filter(c => c.estado !== 'Não Aprovado').length;
-  const ganhos = data.filter(c => ['Ganho','Perdido','Adjudicado','Aguarda Confirmação','Não Adjudicado','Eliminado'].includes(c.estado)).length;
-  const adjudicados = data.filter(c => c.estado === 'Adjudicado').length;
-  const taxaSucesso = aprovados > 0 ? (ganhos / aprovados * 100) : 0;
 
+  // --- Conjuntos por fase ---
+  const aprovadosArr = data.filter(c => c.estado !== 'Não Aprovado');
+  const aprovados = aprovadosArr.length;
+  const naoAprovados = data.filter(c => c.estado === 'Não Aprovado').length;
+
+  const comResultadoArr = data.filter(c =>
+    ['Ganho','Perdido','Adjudicado','Não Adjudicado','Eliminado','Aguarda Confirmação'].includes(c.estado)
+  );
+  const comResultado = comResultadoArr.length;
+
+  // rel_preliminar (coexiste com estado): contabiliza pelo campo preliminar
+  const ganhosPrelim = data.filter(c => c.rel_preliminar === 'Ganho').length;
+  const perdidosPrelim = data.filter(c => c.rel_preliminar === 'Perdido').length;
+
+  const adjudicados = data.filter(c => c.estado === 'Adjudicado').length;
+  const naoAdjudicados = data.filter(c => c.estado === 'Não Adjudicado').length;
+  const eliminados = data.filter(c => c.estado === 'Eliminado').length;
+  const aguardaResultado = data.filter(c => c.estado === 'Aguarda Resultado').length;
+  const aguardaConfirmacao = data.filter(c => c.estado === 'Aguarda Confirmação').length;
+
+  // Taxas
+  const taxaAprovacao = total > 0 ? (aprovados / total * 100) : 0;
+  const taxaPreliminar = comResultado > 0 ? (ganhosPrelim / (ganhosPrelim + perdidosPrelim || 1) * 100) : 0;
+  const decididos = adjudicados + naoAdjudicados + eliminados;
+  const taxaAdjudicacao = decididos > 0 ? (adjudicados / decididos * 100) : 0;
+  const taxaEliminacao = decididos > 0 ? (eliminados / decididos * 100) : 0;
+
+  // --- Valores ---
   const valorBaseTotal = data.reduce((s, c) => s + (Number(c.valor_base) || 0), 0);
   const valorAceitarTotal = data.reduce((s, c) => s + (Number(c.valor_aceitar) || 0), 0);
+  const valorAceitarAdjudicado = data.filter(c => c.estado === 'Adjudicado').reduce((s, c) => s + (Number(c.valor_aceitar) || 0), 0);
+  const valorVencedorTotal = data.filter(c => c.valor_vencedor).reduce((s, c) => s + (Number(c.valor_vencedor) || 0), 0);
 
-  // Distribuição por estado
+  // Diferença Aceitar vs Vencedor (só onde temos ambos)
+  const comparaveis = data.filter(c => c.valor_aceitar && c.valor_vencedor);
+  const diffMediaPct = comparaveis.length > 0
+    ? comparaveis.reduce((s, c) => s + ((c.valor_aceitar - c.valor_vencedor) / c.valor_vencedor * 100), 0) / comparaveis.length
+    : 0;
+
+  const ticketMedioAdj = adjudicados > 0 ? valorAceitarAdjudicado / adjudicados : 0;
+  const maior = data.reduce((m, c) => (Number(c.valor_base) || 0) > (m?.valor_base || 0) ? c : m, null);
+
+  // --- Dimensões ---
   const porEstado = {};
-  data.forEach(c => { porEstado[c.estado] = (porEstado[c.estado] || 0) + 1; });
+  data.forEach(c => { porEstado[c.estado || '—'] = (porEstado[c.estado || '—'] || 0) + 1; });
 
-  // Por plataforma
   const porPlataforma = {};
   data.forEach(c => { const p = c.plataforma || '—'; porPlataforma[p] = (porPlataforma[p] || 0) + 1; });
 
-  // Por âmbito
+  // Por âmbito: nº de concursos com cada checkbox + taxa de sucesso por âmbito
   const porAmbito = {};
-  CONFIG.CONCURSO_AMBITOS.forEach(a => { porAmbito[a.label] = data.filter(c => c[a.key]).length; });
+  CONFIG.CONCURSO_AMBITOS.forEach(a => {
+    const subset = data.filter(c => c[a.key]);
+    const adj = subset.filter(c => c.estado === 'Adjudicado').length;
+    const dec = subset.filter(c => ['Adjudicado','Não Adjudicado','Eliminado'].includes(c.estado)).length;
+    porAmbito[a.label] = {
+      total: subset.length,
+      adjudicados: adj,
+      taxa: dec > 0 ? (adj / dec * 100) : 0
+    };
+  });
+
+  // Top entidades (sigla)
+  const porSigla = {};
+  data.forEach(c => { const s = c.sigla || '—'; porSigla[s] = (porSigla[s] || 0) + 1; });
+  const topSiglas = Object.entries(porSigla).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  // Top localizações
+  const porLoc = {};
+  data.forEach(c => { const l = c.localizacao || '—'; porLoc[l] = (porLoc[l] || 0) + 1; });
+  const topLoc = Object.entries(porLoc).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  // Evolução mensal
+  const meses = {};
+  data.forEach(c => {
+    if (!c.data) return;
+    const k = c.data.slice(0, 7); // YYYY-MM
+    if (!meses[k]) meses[k] = { count: 0, valorBase: 0, ganhos: 0, adjudicados: 0 };
+    meses[k].count++;
+    meses[k].valorBase += Number(c.valor_base) || 0;
+    if (c.rel_preliminar === 'Ganho') meses[k].ganhos++;
+    if (c.estado === 'Adjudicado') meses[k].adjudicados++;
+  });
+  const mesesOrd = Object.keys(meses).sort();
+  const mesLabel = m => {
+    const [y, mo] = m.split('-');
+    const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    return names[parseInt(mo)-1] + '/' + y.slice(2);
+  };
+
+  // Por plataforma — também taxa de sucesso
+  const platDetail = {};
+  Object.keys(porPlataforma).forEach(p => {
+    const subset = data.filter(c => (c.plataforma || '—') === p);
+    const adj = subset.filter(c => c.estado === 'Adjudicado').length;
+    const dec = subset.filter(c => ['Adjudicado','Não Adjudicado','Eliminado'].includes(c.estado)).length;
+    platDetail[p] = {
+      total: subset.length,
+      adjudicados: adj,
+      taxa: dec > 0 ? (adj / dec * 100) : 0
+    };
+  });
+
+  // Cores estado fixas
+  const estadoColors = {
+    'Aprovado': '#0ea5e9',
+    'Não Aprovado': '#f87171',
+    'Aguarda Resultado': '#fbbf24',
+    'Ganho': '#34d399',
+    'Perdido': '#ef4444',
+    'Adjudicado': '#22c55e',
+    'Não Adjudicado': '#dc2626',
+    'Eliminado': '#94a3b8',
+    'Aguarda Confirmação': '#f59e0b',
+    '—': '#cbd5e1'
+  };
 
   $('#section-concursos').innerHTML = `
     <div class="page-header">
       <div>
         <div class="page-title">Concursos — Análise</div>
-        <div class="page-subtitle">${total} concursos</div>
+        <div class="page-subtitle">${total} concursos · ${comResultado} com resultado</div>
       </div>
       <div class="page-actions">
         <div class="tabs">
@@ -2228,49 +2326,243 @@ function renderConcursoAnalise() {
       </div>
     </div>
 
+    <!-- KPIs Volume -->
+    <h4 style="margin:8px 0 12px">Volume</h4>
     <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-label">Total concursos</div><div class="kpi-value">${total}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Ganhos</div><div class="kpi-value" style="color:var(--success)">${ganhos}</div><div class="kpi-sub">de ${aprovados} aprovados</div></div>
-      <div class="kpi-card"><div class="kpi-label">Taxa de sucesso</div><div class="kpi-value">${taxaSucesso.toFixed(1)}%</div></div>
-      <div class="kpi-card"><div class="kpi-label">Adjudicados</div><div class="kpi-value">${adjudicados}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-value">${total}</div><div class="kpi-sub">concursos registados</div></div>
+      <div class="kpi-card"><div class="kpi-label">Aprovados</div><div class="kpi-value" style="color:var(--success)">${aprovados}</div><div class="kpi-sub">taxa ${taxaAprovacao.toFixed(0)}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">Não aprovados</div><div class="kpi-value" style="color:var(--danger)">${naoAprovados}</div><div class="kpi-sub">${total > 0 ? (naoAprovados/total*100).toFixed(0) : 0}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">A decorrer</div><div class="kpi-value" style="color:var(--gold)">${aguardaResultado + aguardaConfirmacao}</div><div class="kpi-sub">${aguardaResultado} aguarda res. · ${aguardaConfirmacao} aguarda conf.</div></div>
     </div>
 
     <div class="kpi-grid" style="margin-bottom:24px">
-      <div class="kpi-card"><div class="kpi-label">Valor Base acumulado</div><div class="kpi-value">${fmtCurrency(valorBaseTotal)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Valor Aceitar acumulado</div><div class="kpi-value">${fmtCurrency(valorAceitarTotal)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ganho preliminar</div><div class="kpi-value" style="color:var(--success)">${ganhosPrelim}</div><div class="kpi-sub">passámos a avaliação</div></div>
+      <div class="kpi-card"><div class="kpi-label">Adjudicados</div><div class="kpi-value" style="color:var(--success)">${adjudicados}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Não adjudicados</div><div class="kpi-value" style="color:var(--danger)">${naoAdjudicados}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Eliminados</div><div class="kpi-value" style="color:var(--danger)">${eliminados}</div></div>
+    </div>
+
+    <!-- KPIs Financeiros -->
+    <h4 style="margin:8px 0 12px">Valor financeiro</h4>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Valor base total</div><div class="kpi-value">${fmtCurrency(valorBaseTotal)}</div><div class="kpi-sub">todos os concursos</div></div>
+      <div class="kpi-card"><div class="kpi-label">Valor Aceitar acumulado</div><div class="kpi-value">${fmtCurrency(valorAceitarTotal)}</div><div class="kpi-sub">nossas propostas</div></div>
+      <div class="kpi-card"><div class="kpi-label">Valor adjudicado</div><div class="kpi-value" style="color:var(--success)">${fmtCurrency(valorAceitarAdjudicado)}</div><div class="kpi-sub">propostas vencedoras</div></div>
+      <div class="kpi-card"><div class="kpi-label">Ticket médio adjudicado</div><div class="kpi-value">${fmtCurrency(ticketMedioAdj)}</div></div>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:24px">
+      <div class="kpi-card"><div class="kpi-label">Aceitar vs Vencedor (média)</div><div class="kpi-value" style="color:${diffMediaPct > 0 ? 'var(--danger)' : 'var(--success)'}">${diffMediaPct > 0 ? '+' : ''}${diffMediaPct.toFixed(1)}%</div><div class="kpi-sub">${comparaveis.length} concursos comparáveis</div></div>
+      <div class="kpi-card"><div class="kpi-label">Maior concurso</div><div class="kpi-value">${fmtCurrency(maior?.valor_base)}</div><div class="kpi-sub">${escapeHtml(maior?.sigla) || '—'}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Valor vencedor total</div><div class="kpi-value">${fmtCurrency(valorVencedorTotal)}</div><div class="kpi-sub">de outras entidades</div></div>
+    </div>
+
+    <!-- KPIs Taxas -->
+    <h4 style="margin:8px 0 12px">Taxas de sucesso</h4>
+    <div class="kpi-grid" style="margin-bottom:24px">
+      <div class="kpi-card"><div class="kpi-label">Taxa de aprovação</div><div class="kpi-value">${taxaAprovacao.toFixed(1)}%</div><div class="kpi-sub">aprovados / total</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa preliminar</div><div class="kpi-value">${taxaPreliminar.toFixed(1)}%</div><div class="kpi-sub">ganhámos a avaliação</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de adjudicação</div><div class="kpi-value" style="color:var(--success)">${taxaAdjudicacao.toFixed(1)}%</div><div class="kpi-sub">adjudicados / decididos</div></div>
+      <div class="kpi-card"><div class="kpi-label">Taxa de eliminação</div><div class="kpi-value" style="color:var(--danger)">${taxaEliminacao.toFixed(1)}%</div><div class="kpi-sub">eliminados / decididos</div></div>
+    </div>
+
+    <!-- Evolução temporal -->
+    <h4 style="margin:8px 0 12px">Evolução mensal</h4>
+    <div class="card mb-lg">
+      <div style="height:280px;position:relative"><canvas id="chart-conc-mensal"></canvas></div>
+    </div>
+
+    <!-- Distribuições -->
+    <h4 style="margin:8px 0 12px">Dimensões</h4>
+    <div class="chart-grid">
+      <div class="card">
+        <h4>Por estado</h4>
+        <div style="height:240px;position:relative"><canvas id="chart-conc-estado"></canvas></div>
+      </div>
+      <div class="card">
+        <h4>Por plataforma</h4>
+        <div style="height:240px;position:relative"><canvas id="chart-conc-plat"></canvas></div>
+      </div>
     </div>
 
     <div class="chart-grid">
-      <div class="card"><h4>Distribuição por estado</h4><canvas id="chart-conc-estado" height="200"></canvas></div>
-      <div class="card"><h4>Concursos por plataforma</h4><canvas id="chart-conc-plat" height="200"></canvas></div>
+      <div class="card">
+        <h4>Por âmbito — Volume vs Adjudicados</h4>
+        <div style="height:240px;position:relative"><canvas id="chart-conc-ambito"></canvas></div>
+      </div>
+      <div class="card">
+        <h4>Por âmbito — Taxa de adjudicação</h4>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Âmbito</th><th class="num">Concursos</th><th class="num">Adjudicados</th><th class="num">Taxa</th></tr></thead>
+            <tbody>
+              ${Object.entries(porAmbito).map(([k, v]) => `
+                <tr>
+                  <td><strong>${k}</strong></td>
+                  <td class="num">${v.total}</td>
+                  <td class="num">${v.adjudicados}</td>
+                  <td class="num"><strong style="color:${v.taxa>=50?'var(--success)':v.taxa>0?'var(--gold-dark)':'var(--danger)'}">${v.taxa.toFixed(1)}%</strong></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+
+    <div class="chart-grid">
+      <div class="card">
+        <h4>Top 10 entidades</h4>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Sigla</th><th class="num">Concursos</th></tr></thead>
+            <tbody>
+              ${topSiglas.length === 0
+                ? `<tr class="empty-row"><td colspan="2">Sem dados</td></tr>`
+                : topSiglas.map(([s, n]) => `<tr><td>${escapeHtml(s)}</td><td class="num">${n}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h4>Top 10 localizações</h4>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Localização</th><th class="num">Concursos</th></tr></thead>
+            <tbody>
+              ${topLoc.length === 0
+                ? `<tr class="empty-row"><td colspan="2">Sem dados</td></tr>`
+                : topLoc.map(([l, n]) => `<tr><td>${escapeHtml(l)}</td><td class="num">${n}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
-      <h4>Concursos por âmbito</h4><canvas id="chart-conc-ambito" height="160"></canvas>
+      <h4>Plataformas — Taxa de adjudicação</h4>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Plataforma</th><th class="num">Total</th><th class="num">Adjudicados</th><th class="num">Taxa</th></tr></thead>
+          <tbody>
+            ${Object.entries(platDetail).sort((a,b) => b[1].total - a[1].total).map(([p, v]) => `
+              <tr>
+                <td><strong>${escapeHtml(p)}</strong></td>
+                <td class="num">${v.total}</td>
+                <td class="num">${v.adjudicados}</td>
+                <td class="num"><strong style="color:${v.taxa>=50?'var(--success)':v.taxa>0?'var(--gold-dark)':'var(--danger)'}">${v.taxa.toFixed(1)}%</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 
-  const estLabels = Object.keys(porEstado);
+  // ---- Gráficos ----
+
+  // 1. Evolução mensal: 2 datasets (Volume e Valor base) com 2 eixos
+  if (state.charts.concMensal) state.charts.concMensal.destroy();
+  if (mesesOrd.length) {
+    state.charts.concMensal = new Chart($('#chart-conc-mensal'), {
+      type: 'bar',
+      data: {
+        labels: mesesOrd.map(mesLabel),
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Concursos',
+            data: mesesOrd.map(m => meses[m].count),
+            backgroundColor: 'rgba(26,58,92,0.6)',
+            yAxisID: 'y',
+            order: 2
+          },
+          {
+            type: 'line',
+            label: 'Valor base (€)',
+            data: mesesOrd.map(m => meses[m].valorBase),
+            borderColor: '#c9a24a',
+            backgroundColor: '#c9a24a',
+            tension: 0.3,
+            yAxisID: 'y1',
+            order: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          y: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Nº concursos' } },
+          y1: { type: 'linear', position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Valor (€)' },
+                ticks: { callback: v => (v / 1000).toLocaleString('pt-PT') + 'k' } }
+        }
+      }
+    });
+  }
+
+  // 2. Estado (doughnut com legenda em baixo, abreviada se preciso)
   if (state.charts.concEstado) state.charts.concEstado.destroy();
+  const estLabels = Object.keys(porEstado);
   if (estLabels.length) state.charts.concEstado = new Chart($('#chart-conc-estado'), {
     type: 'doughnut',
-    data: { labels: estLabels, datasets: [{ data: estLabels.map(e => porEstado[e]), backgroundColor: ['#1a3a5c','#f87171','#fbbf24','#34d399','#ef4444','#22c55e','#dc2626','#94a3b8','#f59e0b'] }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+    data: {
+      labels: estLabels,
+      datasets: [{
+        data: estLabels.map(e => porEstado[e]),
+        backgroundColor: estLabels.map(e => estadoColors[e] || '#94a3b8'),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.parsed} (${(ctx.parsed/total*100).toFixed(1)}%)` } }
+      }
+    }
   });
 
-  const platLabels = Object.keys(porPlataforma);
+  // 3. Plataforma — bar horizontal para acomodar nomes
   if (state.charts.concPlat) state.charts.concPlat.destroy();
+  const platLabels = Object.keys(porPlataforma);
   if (platLabels.length) state.charts.concPlat = new Chart($('#chart-conc-plat'), {
     type: 'bar',
-    data: { labels: platLabels, datasets: [{ label: 'Concursos', data: platLabels.map(p => porPlataforma[p]), backgroundColor: '#1a3a5c' }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    data: {
+      labels: platLabels,
+      datasets: [{ label: 'Concursos', data: platLabels.map(p => porPlataforma[p]), backgroundColor: '#1a3a5c' }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
   });
 
-  const ambLabels = Object.keys(porAmbito);
+  // 4. Âmbito — barras agrupadas (Total + Adjudicados)
   if (state.charts.concAmbito) state.charts.concAmbito.destroy();
+  const ambLabels = Object.keys(porAmbito);
   state.charts.concAmbito = new Chart($('#chart-conc-ambito'), {
     type: 'bar',
-    data: { labels: ambLabels, datasets: [{ label: 'Concursos', data: ambLabels.map(a => porAmbito[a]), backgroundColor: '#c9a24a' }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    data: {
+      labels: ambLabels,
+      datasets: [
+        { label: 'Total', data: ambLabels.map(a => porAmbito[a].total), backgroundColor: '#1a3a5c' },
+        { label: 'Adjudicados', data: ambLabels.map(a => porAmbito[a].adjudicados), backgroundColor: '#c9a24a' }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
   });
 }
 
