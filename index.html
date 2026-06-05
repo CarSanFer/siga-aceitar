@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.05-14h47</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.05-15h21</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1198,6 +1198,16 @@ function fmtCurrency(v) {
   const [intPart, decPart] = fixed.split('.');
   const intWithSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return intWithSpaces + ',' + decPart + ' €';
+}
+
+// Inteiros / quilómetros / qualquer valor com separador de milhares ' '
+function fmtNumber(v, withSign) {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Math.round(Number(v));
+  if (isNaN(n)) return '—';
+  const sign = (withSign && n > 0) ? '+' : (n < 0 ? '-' : '');
+  const intWithSpaces = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return sign + intWithSpaces;
 }
 
 function fmtDate(v) {
@@ -4529,11 +4539,11 @@ function renderFrotaControlo() {
                   <td class="cen"><strong>${escapeHtml(c.matricula)}</strong></td>
                   <td>${escapeHtml(c.viatura)}</td>
                   <td>${escapeHtml(c.utilizador)}</td>
-                  <td class="num">${c.kms_atuais != null ? c.kms_atuais.toLocaleString('pt-PT') : '—'}</td>
-                  <td class="num">${c.kms_previstos != null ? Math.round(c.kms_previstos).toLocaleString('pt-PT') : '—'}</td>
-                  <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${c.desvio != null ? (c.desvio > 0 ? '+' : '') + Math.round(c.desvio).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num">${fmtNumber(c.kms_atuais)}</td>
+                  <td class="num">${fmtNumber(c.kms_previstos)}</td>
+                  <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtNumber(c.desvio, true)}</td>
                   <td class="num">${fmtCurrency(c.custo_momento)}</td>
-                  <td class="num">${c.kms_extrapolados != null ? Math.round(c.kms_extrapolados).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num">${fmtNumber(c.kms_extrapolados)}</td>
                   <td class="num" style="color:${c.custo_extrapolado > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtCurrency(c.custo_extrapolado)}</td>
                   ${isAdmin() ? `<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteControlo('${c.id}','${c.viatura_id}')">🗑</button></td>` : ''}
                 </tr>
@@ -4687,6 +4697,21 @@ function openFrotaModal(id) {
         </div>
 
         <div class="form-group">
+          <label>Contrato (PDF / imagem)</label>
+          ${v.contrato_storage_path ? `
+            <div style="padding:10px 12px;border:1px solid var(--border-light);border-radius:var(--radius);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                📎 <a href="#" onclick="downloadFrotaContrato('${v.id}');return false;" style="color:var(--navy);font-weight:600">${escapeHtml(v.contrato_nome) || 'Contrato'}</a>
+                ${v.contrato_tamanho_bytes ? `<span class="text-small text-muted"> · ${(v.contrato_tamanho_bytes/1024).toFixed(0)} KB</span>` : ''}
+              </div>
+              ${canEdit() ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="removerFrotaContrato('${v.id}')">Remover</button>` : ''}
+            </div>
+          ` : ''}
+          <input type="file" class="form-control" name="contrato_file" accept="application/pdf,image/*">
+          <div class="text-small text-muted" style="margin-top:4px">${v.contrato_storage_path ? 'Selecionar novo ficheiro substitui o atual.' : 'Opcional. PDF ou imagem.'}</div>
+        </div>
+
+        <div class="form-group">
           <label>Notas</label>
           <textarea class="form-control" name="notas" rows="2" style="min-height:60px">${escapeHtml(v.notas)}</textarea>
         </div>
@@ -4715,14 +4740,20 @@ function updateFrotaCalc() {
   const d = frotaCalcDerived({ inicio_contrato: ini, fim_contrato: fim, kms_contratados: kms });
   const durEl = $('#frota-duracao'), anoEl = $('#frota-kmsano'), mesEl = $('#frota-kmsmes');
   if (durEl) durEl.value = d.duracaoAnos ? d.duracaoAnos.toFixed(1) + ' anos (' + Math.round(d.mesesContrato) + ' meses)' : '—';
-  if (anoEl) anoEl.value = d.kmsAno ? Math.round(d.kmsAno).toLocaleString('pt-PT') + ' km' : '—';
-  if (mesEl) mesEl.value = d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') + ' km' : '—';
+  if (anoEl) anoEl.value = d.kmsAno ? fmtNumber(d.kmsAno) + ' km' : '—';
+  if (mesEl) mesEl.value = d.kmsMes ? fmtNumber(d.kmsMes) + ' km' : '—';
 }
 
 async function saveFrota(id) {
   const form = $('#form-frota');
+  const fileInput = form.elements['contrato_file'];
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
   const rec = {};
-  new FormData(form).forEach((val, key) => { rec[key] = val === '' ? null : val; });
+  new FormData(form).forEach((val, key) => {
+    if (key === 'contrato_file') return; // tratado à parte
+    rec[key] = val === '' ? null : val;
+  });
   if (!rec.matricula) { showToast('Matrícula obrigatória', 'error'); return; }
 
   ['kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps','seguro_valor'].forEach(k => {
@@ -4734,14 +4765,70 @@ async function saveFrota(id) {
     ['empresa','inicio_contrato','fim_contrato','kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps'].forEach(k => rec[k] = null);
   }
 
-  const { error } = id
-    ? await sb.from('frota').update(rec).eq('id', id)
-    : await sb.from('frota').insert(rec);
-  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  // Insert/Update da viatura (sem o anexo ainda)
+  let row;
+  if (id) {
+    const { data, error } = await sb.from('frota').update(rec).eq('id', id).select().single();
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    row = data;
+  } else {
+    const { data, error } = await sb.from('frota').insert(rec).select().single();
+    if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+    row = data;
+  }
+
+  // Upload do contrato (se houver ficheiro)
+  if (file && row) {
+    // Apagar anterior se existir
+    if (row.contrato_storage_path) {
+      await sb.storage.from('frota-anexos').remove([row.contrato_storage_path]);
+    }
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const path = `${row.id}/contrato_${Date.now()}_${safeName}`;
+    const { error: upErr } = await sb.storage.from('frota-anexos').upload(path, file, { upsert: true });
+    if (upErr) { showToast('Erro ao enviar contrato: ' + upErr.message, 'error'); }
+    else {
+      await sb.from('frota').update({
+        contrato_storage_path: path,
+        contrato_nome: file.name,
+        contrato_tamanho_bytes: file.size,
+        contrato_mime_type: file.type || null
+      }).eq('id', row.id);
+    }
+  }
+
   closeModal();
   await reloadTable('frota');
   renderFrota();
   showToast(id ? 'Viatura atualizada' : 'Viatura criada', 'success');
+}
+
+async function downloadFrotaContrato(id) {
+  const v = state.data.frota.find(x => x.id === id);
+  if (!v || !v.contrato_storage_path) return;
+  const { data, error } = await sb.storage.from('frota-anexos').createSignedUrl(v.contrato_storage_path, 60);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function removerFrotaContrato(id) {
+  if (!confirm('Remover o contrato anexado?')) return;
+  const v = state.data.frota.find(x => x.id === id);
+  if (!v) return;
+  if (v.contrato_storage_path) {
+    await sb.storage.from('frota-anexos').remove([v.contrato_storage_path]);
+  }
+  const { error } = await sb.from('frota').update({
+    contrato_storage_path: null,
+    contrato_nome: null,
+    contrato_tamanho_bytes: null,
+    contrato_mime_type: null
+  }).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('frota');
+  closeModal();
+  openFrotaModal(id);
+  showToast('Contrato removido', 'success');
 }
 
 async function deleteFrota(id) {
@@ -4776,8 +4863,8 @@ function openFrotaDetail(id) {
         <div><label class="text-small text-muted">Início</label><div>${isContrato ? fmtDate(v.inicio_contrato) : '—'}</div></div>
         <div><label class="text-small text-muted">Fim</label><div>${isContrato ? fmtDate(v.fim_contrato) : '—'}</div></div>
         ${isContrato ? `
-          <div><label class="text-small text-muted">Kms contratados</label><div>${v.kms_contratados ? v.kms_contratados.toLocaleString('pt-PT') : '—'}</div></div>
-          <div><label class="text-small text-muted">Kms/mês</label><div>${d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') : '—'}</div></div>
+          <div><label class="text-small text-muted">Kms contratados</label><div>${fmtNumber(v.kms_contratados)}</div></div>
+          <div><label class="text-small text-muted">Kms/mês</label><div>${fmtNumber(d.kmsMes)}</div></div>
           <div><label class="text-small text-muted">Mensalidade</label><div>${fmtCurrency(v.mensalidade)}${v.mensalidade_gps ? ' + ' + fmtCurrency(v.mensalidade_gps) + ' GPS' : ''}</div></div>
         ` : ''}
         <div><label class="text-small text-muted">Seguro</label><div>${v.seguro_valor ? fmtCurrency(v.seguro_valor) + (v.seguro_periodicidade ? ' / ' + escapeHtml(v.seguro_periodicidade) : '') : '—'}</div></div>
@@ -4787,6 +4874,13 @@ function openFrotaDetail(id) {
         <div class="mb-lg">
           <label class="text-small text-muted">Observações</label>
           <div style="white-space:pre-wrap">${escapeHtml(v.observacoes)}</div>
+        </div>
+      ` : ''}
+
+      ${v.contrato_storage_path ? `
+        <div class="mb-lg" style="padding:10px 12px;border:1px solid var(--border-light);border-radius:var(--radius);background:var(--bg);display:flex;align-items:center;gap:8px">
+          📎 <a href="#" onclick="downloadFrotaContrato('${id}');return false;" style="color:var(--navy);font-weight:600">${escapeHtml(v.contrato_nome) || 'Contrato'}</a>
+          ${v.contrato_tamanho_bytes ? `<span class="text-small text-muted">· ${(v.contrato_tamanho_bytes/1024).toFixed(0)} KB</span>` : ''}
         </div>
       ` : ''}
 
@@ -4814,11 +4908,11 @@ function openFrotaDetail(id) {
                 ${controlos.map(c => `
                   <tr>
                     <td>${fmtDate(c.data_controlo)}</td>
-                    <td class="num">${c.kms_atuais != null ? c.kms_atuais.toLocaleString('pt-PT') : '—'}</td>
-                    <td class="num">${c.kms_previstos != null ? Math.round(c.kms_previstos).toLocaleString('pt-PT') : '—'}</td>
-                    <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'}">${c.desvio != null ? (c.desvio > 0 ? '+' : '') + Math.round(c.desvio).toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num">${fmtNumber(c.kms_atuais)}</td>
+                    <td class="num">${fmtNumber(c.kms_previstos)}</td>
+                    <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtNumber(c.desvio, true)}</td>
                     <td class="num">${fmtCurrency(c.custo_momento)}</td>
-                    <td class="num">${c.kms_extrapolados != null ? Math.round(c.kms_extrapolados).toLocaleString('pt-PT') : '—'}</td>
+                    <td class="num">${fmtNumber(c.kms_extrapolados)}</td>
                     <td class="num" style="color:${c.custo_extrapolado > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtCurrency(c.custo_extrapolado)}</td>
                     ${isAdmin() ? `<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteControlo('${c.id}','${id}')">🗑</button></td>` : ''}
                   </tr>
@@ -4873,10 +4967,10 @@ function openControloModal(viaturaId) {
     const r = computeControlo(v, data, kms);
     if (!r) { $('#ctrl-preview').innerHTML = ''; return; }
     $('#ctrl-preview').innerHTML = `
-      Kms previstos: <strong>${Math.round(r.kms_previstos).toLocaleString('pt-PT')}</strong> ·
-      Desvio: <strong style="color:${r.desvio>0?'var(--danger)':'var(--success)'}">${r.desvio>0?'+':''}${Math.round(r.desvio).toLocaleString('pt-PT')}</strong><br>
+      Kms previstos: <strong>${fmtNumber(r.kms_previstos)}</strong> ·
+      Desvio: <strong style="color:${r.desvio>0?'var(--danger)':'var(--success)'}">${fmtNumber(r.desvio, true)}</strong><br>
       Custo no momento: <strong>${fmtCurrency(r.custo_momento)}</strong><br>
-      Projeção fim do contrato: <strong>${Math.round(r.kms_extrapolados).toLocaleString('pt-PT')} km</strong> ·
+      Projeção fim do contrato: <strong>${fmtNumber(r.kms_extrapolados)} km</strong> ·
       Custo estimado: <strong style="color:${r.custo_extrapolado>0?'var(--danger)':'var(--success)'}">${fmtCurrency(r.custo_extrapolado)}</strong>`;
   };
   $('#ctrl-data').addEventListener('input', calc);
