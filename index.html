@@ -388,6 +388,42 @@
     }
     .card-body { padding: 20px; }
 
+    /* Title h4 directly inside a card (analise blocks) */
+    .card > h4 {
+      margin: 0;
+      padding: 18px 20px 14px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--navy);
+      letter-spacing: 0.2px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    /* Spacing for canvas / table directly after card h4 */
+    .card > h4 + div,
+    .card > h4 + canvas,
+    .card > h4 + .table-wrapper {
+      padding: 16px 20px;
+    }
+    .card > h4 + .table-wrapper {
+      padding: 0; /* tabela usa o seu próprio padding nas células */
+    }
+
+    /* Variante de tabela para análise: tudo centrado e 1ª coluna identada */
+    .data-table.analytics thead th {
+      text-align: center;
+      cursor: default;
+    }
+    .data-table.analytics thead th:hover { background: var(--bg-muted); }
+    .data-table.analytics tbody td {
+      text-align: center;
+    }
+    .data-table.analytics tbody td:first-child,
+    .data-table.analytics thead th:first-child {
+      text-align: left;
+      padding-left: 24px;
+    }
+
     /* ========== FILTER BAR ========== */
     .filter-bar {
       display: flex;
@@ -453,6 +489,15 @@
       font-style: italic;
     }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .cen { text-align: center; }
+
+    /* Cabeçalhos da listagem com ordenação: sempre centrados e bold */
+    .data-table.sortable-listing thead th {
+      text-align: center;
+      font-weight: 700;
+    }
+    .data-table.sortable-listing thead th.sortable { cursor: pointer; }
+    .data-table.sortable-listing thead th.sortable:hover { background: var(--border-light); }
 
     /* ========== STATUS BADGES ========== */
     .badge {
@@ -824,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.05-13h24</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.05-14h47</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2393,7 +2438,7 @@ function renderConcursoAnalise() {
       <div class="card">
         <h4>Por âmbito — Taxa de adjudicação</h4>
         <div class="table-wrapper">
-          <table class="data-table">
+          <table class="data-table analytics">
             <thead><tr><th>Âmbito</th><th class="num">Concursos</th><th class="num">Adjudicados</th><th class="num">Taxa</th></tr></thead>
             <tbody>
               ${Object.entries(porAmbito).map(([k, v]) => `
@@ -2414,7 +2459,7 @@ function renderConcursoAnalise() {
       <div class="card">
         <h4>Top 10 entidades</h4>
         <div class="table-wrapper">
-          <table class="data-table">
+          <table class="data-table analytics">
             <thead><tr><th>Sigla</th><th class="num">Concursos</th></tr></thead>
             <tbody>
               ${topSiglas.length === 0
@@ -2427,7 +2472,7 @@ function renderConcursoAnalise() {
       <div class="card">
         <h4>Top 10 localizações</h4>
         <div class="table-wrapper">
-          <table class="data-table">
+          <table class="data-table analytics">
             <thead><tr><th>Localização</th><th class="num">Concursos</th></tr></thead>
             <tbody>
               ${topLoc.length === 0
@@ -2442,7 +2487,7 @@ function renderConcursoAnalise() {
     <div class="card">
       <h4>Plataformas — Taxa de adjudicação</h4>
       <div class="table-wrapper">
-        <table class="data-table">
+        <table class="data-table analytics">
           <thead><tr><th>Plataforma</th><th class="num">Total</th><th class="num">Adjudicados</th><th class="num">Taxa</th></tr></thead>
           <tbody>
             ${Object.entries(platDetail).sort((a,b) => b[1].total - a[1].total).map(([p, v]) => `
@@ -4269,34 +4314,63 @@ function switchFrotaView(view) {
 function renderFrota() {
   if (state.frotaView === 'financeiro') { renderFrotaFinanceiro(); return; }
   if (state.frotaView === 'analise') { renderFrotaAnalise(); return; }
+  if (state.frotaView === 'controlo') { renderFrotaControlo(); return; }
   renderFrotaListagem();
+}
+
+function frotaTabs(active) {
+  return `
+    <div class="tabs">
+      <button class="tab-btn ${active==='listagem'?'active':''}" onclick="switchFrotaView('listagem')">Listagem</button>
+      <button class="tab-btn ${active==='controlo'?'active':''}" onclick="switchFrotaView('controlo')">Controlo</button>
+      <button class="tab-btn ${active==='financeiro'?'active':''}" onclick="switchFrotaView('financeiro')">Financeiro</button>
+      <button class="tab-btn ${active==='analise'?'active':''}" onclick="switchFrotaView('analise')">Análise</button>
+    </div>`;
 }
 
 function renderFrotaListagem() {
   const f = state.filters.frota;
-  let data = state.data.frota;
+  if (!state.sort.frota) state.sort.frota = { key: 'matricula', dir: 'asc' };
+  const { key, dir } = state.sort.frota;
+
+  let data = [...state.data.frota];
   if (f.search) {
     const q = f.search.toLowerCase();
     data = data.filter(v =>
       (v.matricula || '').toLowerCase().includes(q) ||
       (v.viatura || '').toLowerCase().includes(q) ||
-      (v.utilizador || '').toLowerCase().includes(q)
+      (v.utilizador || '').toLowerCase().includes(q) ||
+      (v.empresa || '').toLowerCase().includes(q)
     );
   }
   if (f.tipo) data = data.filter(v => v.tipo === f.tipo);
+
+  // Derivar duração para ordenar
+  const enriched = data.map(v => {
+    const d = frotaCalcDerived(v);
+    return { ...v, _duracao_anos: d.duracaoAnos != null ? Math.round(d.duracaoAnos) : null };
+  });
+
+  enriched.sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb||'').toLowerCase(); }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const arrow = (k) => key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
 
   $('#section-frota').innerHTML = `
     <div class="page-header">
       <div>
         <div class="page-title">Frota</div>
-        <div class="page-subtitle">${data.length} viatura(s)</div>
+        <div class="page-subtitle">${enriched.length} viatura(s)</div>
       </div>
       <div class="page-actions">
-        <div class="tabs">
-          <button class="tab-btn active" onclick="switchFrotaView('listagem')">Listagem</button>
-          <button class="tab-btn" onclick="switchFrotaView('financeiro')">Financeiro</button>
-          <button class="tab-btn" onclick="switchFrotaView('analise')">Análise</button>
-        </div>
+        ${frotaTabs('listagem')}
         <button class="btn btn-secondary" onclick="exportFrota()">⬇ Export XLSX</button>
         ${canEdit() ? `<button class="btn btn-gold" onclick="openFrotaModal()">+ Nova Viatura</button>` : ''}
         ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('frota','Frota','frota')" title="Apagar tudo">🗑 Apagar tudo</button>` : ''}
@@ -4305,7 +4379,7 @@ function renderFrotaListagem() {
 
     <div class="card">
       <div class="filter-bar">
-        <input type="text" class="form-control search" id="frota-search" placeholder="Pesquisar matrícula, viatura, utilizador..."
+        <input type="text" class="form-control search" id="frota-search" placeholder="Pesquisar matrícula, viatura, empresa, utilizador..."
                value="${escapeHtml(f.search)}" oninput="state.filters.frota.search = this.value; renderFrotaPreserveFocus();">
         <select class="form-control" onchange="state.filters.frota.tipo = this.value; renderFrota();">
           <option value="" ${f.tipo===''?'selected':''}>Todos os tipos</option>
@@ -4316,35 +4390,47 @@ function renderFrotaListagem() {
         <button class="btn btn-ghost btn-sm" onclick="state.filters.frota={search:'',tipo:''};renderFrota();">Limpar</button>
       </div>
       <div class="table-wrapper">
-        <table class="data-table">
+        <table class="data-table sortable-listing">
           <thead>
             <tr>
-              <th>Matrícula</th>
-              <th>Viatura</th>
-              <th>Tipo</th>
-              <th>Empresa</th>
-              <th>Fim Contrato</th>
-              <th class="num">Kms/mês</th>
-              <th class="num">Mensalidade</th>
-              <th>Utilizador</th>
+              <th class="sortable" onclick="sortFrota('matricula')">Matrícula${arrow('matricula')}</th>
+              <th class="sortable" onclick="sortFrota('viatura')">Viatura${arrow('viatura')}</th>
+              <th class="sortable" onclick="sortFrota('tipo')">Tipo${arrow('tipo')}</th>
+              <th class="sortable" onclick="sortFrota('empresa')">Empresa${arrow('empresa')}</th>
+              <th class="sortable" onclick="sortFrota('inicio_contrato')">Início Contrato${arrow('inicio_contrato')}</th>
+              <th class="sortable" onclick="sortFrota('_duracao_anos')">Duração${arrow('_duracao_anos')}</th>
+              <th class="sortable" onclick="sortFrota('fim_contrato')">Fim Contrato${arrow('fim_contrato')}</th>
+              <th class="sortable num" onclick="sortFrota('mensalidade')">Mensalidade${arrow('mensalidade')}</th>
+              <th class="sortable num" onclick="sortFrota('mensalidade_gps')">GPS${arrow('mensalidade_gps')}</th>
+              <th class="sortable num" onclick="sortFrota('seguro_valor')">Seguro${arrow('seguro_valor')}</th>
+              <th class="sortable" onclick="sortFrota('seguro_periodicidade')">Periodicidade${arrow('seguro_periodicidade')}</th>
+              <th class="sortable num" onclick="sortFrota('valor_km_mais')">Km +${arrow('valor_km_mais')}</th>
+              <th class="sortable num" onclick="sortFrota('valor_km_menos')">Km −${arrow('valor_km_menos')}</th>
+              <th class="sortable" onclick="sortFrota('utilizador')">Utilizador${arrow('utilizador')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            ${data.length === 0
-              ? `<tr class="empty-row"><td colspan="9">Sem viaturas</td></tr>`
-              : data.map(v => {
-                const d = frotaCalcDerived(v);
+            ${enriched.length === 0
+              ? `<tr class="empty-row"><td colspan="15">Sem viaturas</td></tr>`
+              : enriched.map(v => {
                 const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
+                const dur = v._duracao_anos != null ? v._duracao_anos + ' ano' + (v._duracao_anos===1?'':'s') : '—';
                 return `
                 <tr class="clickable" onclick="openFrotaDetail('${v.id}')">
-                  <td><strong>${escapeHtml(v.matricula)}</strong></td>
+                  <td class="cen"><strong>${escapeHtml(v.matricula)}</strong></td>
                   <td>${escapeHtml(v.viatura)}</td>
-                  <td>${escapeHtml(v.tipo)}</td>
+                  <td class="cen">${escapeHtml(v.tipo)}</td>
                   <td>${isContrato ? escapeHtml(v.empresa) : '—'}</td>
-                  <td>${isContrato ? fmtDate(v.fim_contrato) : '—'}</td>
-                  <td class="num">${isContrato && d.kmsMes ? Math.round(d.kmsMes).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="cen">${isContrato ? fmtDate(v.inicio_contrato) : '—'}</td>
+                  <td class="cen">${isContrato ? dur : '—'}</td>
+                  <td class="cen">${isContrato ? fmtDate(v.fim_contrato) : '—'}</td>
                   <td class="num">${isContrato ? fmtCurrency(v.mensalidade) : '—'}</td>
+                  <td class="num">${isContrato ? fmtCurrency(v.mensalidade_gps) : '—'}</td>
+                  <td class="num">${fmtCurrency(v.seguro_valor)}</td>
+                  <td>${escapeHtml(v.seguro_periodicidade) || '—'}</td>
+                  <td class="num">${isContrato ? fmtCurrency(v.valor_km_mais) : '—'}</td>
+                  <td class="num">${isContrato ? fmtCurrency(v.valor_km_menos) : '—'}</td>
                   <td>${escapeHtml(v.utilizador)}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
@@ -4359,6 +4445,115 @@ function renderFrotaListagem() {
       </div>
     </div>
   `;
+}
+
+function sortFrota(k) {
+  if (!state.sort.frota) state.sort.frota = { key: 'matricula', dir: 'asc' };
+  if (state.sort.frota.key === k) state.sort.frota.dir = state.sort.frota.dir === 'asc' ? 'desc' : 'asc';
+  else { state.sort.frota.key = k; state.sort.frota.dir = 'asc'; }
+  renderFrota();
+}
+
+// Vista global de todos os controlos de kms
+function renderFrotaControlo() {
+  if (!state.filters.frotaControlos) state.filters.frotaControlos = { search: '', viatura: '' };
+  const f = state.filters.frotaControlos;
+
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+
+  let controlos = state.data.frotaControlos.map(c => ({
+    ...c,
+    matricula: vmap[c.viatura_id]?.matricula || '',
+    viatura: vmap[c.viatura_id]?.viatura || '',
+    utilizador: vmap[c.viatura_id]?.utilizador || ''
+  }));
+
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    controlos = controlos.filter(c =>
+      (c.matricula || '').toLowerCase().includes(q) ||
+      (c.viatura || '').toLowerCase().includes(q) ||
+      (c.utilizador || '').toLowerCase().includes(q)
+    );
+  }
+  if (f.viatura) controlos = controlos.filter(c => c.viatura_id === f.viatura);
+
+  // ordenar por data desc
+  controlos.sort((a, b) => new Date(b.data_controlo) - new Date(a.data_controlo));
+
+  $('#section-frota').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Frota — Controlo de Kms</div>
+        <div class="page-subtitle">${controlos.length} controlo(s)</div>
+      </div>
+      <div class="page-actions">
+        ${frotaTabs('controlo')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="text" class="form-control search" id="ctrl-search" placeholder="Pesquisar matrícula, viatura, utilizador..."
+               value="${escapeHtml(f.search)}" oninput="state.filters.frotaControlos.search = this.value; renderFrotaControloPreserveFocus();">
+        <select class="form-control" onchange="state.filters.frotaControlos.viatura = this.value; renderFrota();">
+          <option value="">Todas as viaturas</option>
+          ${state.data.frota.map(v => `<option value="${v.id}" ${f.viatura===v.id?'selected':''}>${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="state.filters.frotaControlos={search:'',viatura:''};renderFrota();">Limpar</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="cen">Data</th>
+              <th class="cen">Matrícula</th>
+              <th>Viatura</th>
+              <th>Utilizador</th>
+              <th class="num">Kms atuais</th>
+              <th class="num">Kms previstos</th>
+              <th class="num">Desvio</th>
+              <th class="num">Custo momento</th>
+              <th class="num">Kms fim (est.)</th>
+              <th class="num">Custo fim (est.)</th>
+              ${isAdmin() ? '<th></th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${controlos.length === 0
+              ? `<tr class="empty-row"><td colspan="${isAdmin()?11:10}">Sem controlos registados</td></tr>`
+              : controlos.map(c => `
+                <tr class="clickable" onclick="openFrotaDetail('${c.viatura_id}')">
+                  <td class="cen">${fmtDate(c.data_controlo)}</td>
+                  <td class="cen"><strong>${escapeHtml(c.matricula)}</strong></td>
+                  <td>${escapeHtml(c.viatura)}</td>
+                  <td>${escapeHtml(c.utilizador)}</td>
+                  <td class="num">${c.kms_atuais != null ? c.kms_atuais.toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num">${c.kms_previstos != null ? Math.round(c.kms_previstos).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${c.desvio != null ? (c.desvio > 0 ? '+' : '') + Math.round(c.desvio).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num">${fmtCurrency(c.custo_momento)}</td>
+                  <td class="num">${c.kms_extrapolados != null ? Math.round(c.kms_extrapolados).toLocaleString('pt-PT') : '—'}</td>
+                  <td class="num" style="color:${c.custo_extrapolado > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtCurrency(c.custo_extrapolado)}</td>
+                  ${isAdmin() ? `<td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteControlo('${c.id}','${c.viatura_id}')">🗑</button></td>` : ''}
+                </tr>
+              `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderFrotaControloPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'ctrl-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderFrota();
+  if (isSearch) {
+    const newEl = document.getElementById('ctrl-search');
+    if (newEl) { newEl.focus(); if (pos !== null) newEl.setSelectionRange(pos, pos); }
+  }
 }
 
 function renderFrotaPreserveFocus() {
@@ -4767,11 +4962,7 @@ function renderFrotaFinanceiro() {
         <div class="page-subtitle">${desp.length} despesa(s) · ${fmtCurrency(total)}</div>
       </div>
       <div class="page-actions">
-        <div class="tabs">
-          <button class="tab-btn" onclick="switchFrotaView('listagem')">Listagem</button>
-          <button class="tab-btn active" onclick="switchFrotaView('financeiro')">Financeiro</button>
-          <button class="tab-btn" onclick="switchFrotaView('analise')">Análise</button>
-        </div>
+        ${frotaTabs('financeiro')}
         <button class="btn btn-secondary" onclick="exportFrotaDespesas()">⬇ Export XLSX</button>
         ${canEdit() ? `<button class="btn btn-gold" onclick="openDespesaModal()">+ Nova Despesa</button>` : ''}
       </div>
@@ -4943,11 +5134,7 @@ function renderFrotaAnalise() {
         <div class="page-subtitle">${viaturas.length} viaturas</div>
       </div>
       <div class="page-actions">
-        <div class="tabs">
-          <button class="tab-btn" onclick="switchFrotaView('listagem')">Listagem</button>
-          <button class="tab-btn" onclick="switchFrotaView('financeiro')">Financeiro</button>
-          <button class="tab-btn active" onclick="switchFrotaView('analise')">Análise</button>
-        </div>
+        ${frotaTabs('analise')}
       </div>
     </div>
 
