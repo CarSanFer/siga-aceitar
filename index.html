@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.05-15h21</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.12-08h13</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -3742,6 +3742,40 @@ function deleteInspect(id) {
   });
 }
 
+// Mapa de reversão de estados (só superadmin)
+// para = estado anterior; clear = campos a limpar (data + outros opcionais)
+const INSPECT_REVERT_MAP = {
+  'Pendente':        { para: 'Em Aberto',  clear: ['data_pendente'] },
+  'Enviada':         { para: 'Em Aberto',  clear: ['data_envio'] },
+  'Adjudicada':      { para: 'Enviada',    clear: ['data_adjudicacao'] },
+  'Não Adjudicada':  { para: 'Enviada',    clear: ['data_nao_adjudicacao','motivo_nao_adjudicacao'] },
+  'Agendada':        { para: 'Adjudicada', clear: ['data_agendada'] },
+  'Realizada':       { para: 'Agendada',   clear: ['data_realizacao','data_inspecao'] },
+  'Com Relatório':   { para: 'Realizada',  clear: ['data_relatorio'] },
+  'Fechada':         { para: 'Com Relatório', clear: ['data_fechado'] },
+  'Cancelada':       { para: 'Em Aberto',  clear: ['data_cancelado'] }
+};
+
+async function reverterEstadoInspect(id) {
+  const r = state.data.inspect.find(x => x.id === id);
+  if (!r) return;
+  const map = INSPECT_REVERT_MAP[r.estado];
+  if (!map) { showToast('Não é possível reverter este estado', 'error'); return; }
+
+  const msg = `Reverter de "${r.estado}" para "${map.para}"?\n\nVai limpar: ${map.clear.join(', ')}.\n\nOs valores (€) e anexos mantêm-se.`;
+  if (!confirm(msg)) return;
+
+  const update = { estado: map.para };
+  map.clear.forEach(f => { update[f] = null; });
+
+  const { error } = await sb.from('inspect_pedidos').update(update).eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('inspect');
+  closeModal();
+  openInspectDetail(id);
+  showToast(`Estado revertido para ${map.para}`, 'success');
+}
+
 async function openInspectDetail(id) {
   const r = state.data.inspect.find(x => x.id === id);
   if (!r) return;
@@ -3796,6 +3830,16 @@ async function openInspectDetail(id) {
               ${escapeHtml(t.label)}
             </button>
           `).join('')}
+        </div>
+      ` : ''}
+
+      ${isAdmin() && INSPECT_REVERT_MAP[r.estado] ? `
+        <div style="margin: 8px 0 16px">
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)"
+                  onclick="reverterEstadoInspect('${id}')"
+                  title="Voltar ao estado anterior (apenas superadmin)">
+            ↶ Reverter estado para "${INSPECT_REVERT_MAP[r.estado].para}"
+          </button>
         </div>
       ` : ''}
 
