@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h12</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h34</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2953,10 +2953,9 @@ function exportFinanceiro() {
 // ============================================================
 function renderInspectDuplicados() {
   const rows = state.data.inspect;
-
-  // Indexar por referência (lowercase trim) e por cliente (lowercase trim)
   const norm = s => (s || '').toString().trim().toLowerCase();
 
+  // Grupos por referência e por cliente
   const porRef = {};
   const porCliente = {};
   rows.forEach(r => {
@@ -2965,34 +2964,62 @@ function renderInspectDuplicados() {
     if (rRef) (porRef[rRef] = porRef[rRef] || []).push(r);
     if (rCli) (porCliente[rCli] = porCliente[rCli] || []).push(r);
   });
-
-  // Grupos com 2+ pedidos
   const gruposRef = Object.entries(porRef).filter(([, arr]) => arr.length > 1);
   const gruposCli = Object.entries(porCliente).filter(([, arr]) => arr.length > 1);
 
-  // Conjunto de IDs envolvidos (para contadores)
-  const idsRef = new Set();
-  gruposRef.forEach(([, arr]) => arr.forEach(r => idsRef.add(r.id)));
-  const idsCli = new Set();
-  gruposCli.forEach(([, arr]) => arr.forEach(r => idsCli.add(r.id)));
+  const idsRef = new Set(); gruposRef.forEach(([,a]) => a.forEach(r => idsRef.add(r.id)));
+  const idsCli = new Set(); gruposCli.forEach(([,a]) => a.forEach(r => idsCli.add(r.id)));
   const totalEnvolvidos = new Set([...idsRef, ...idsCli]).size;
 
-  const linhaPedido = (r, motivo) => `
-    <tr>
-      <td>${r.id_pedido ? escapeHtml(r.id_pedido) : '—'}</td>
-      <td>${r.referencia ? escapeHtml(r.referencia) : '—'}</td>
-      <td>${escapeHtml(r.cliente)}</td>
-      <td>${fmtDate(r.data_pedido)}</td>
-      <td>${escapeHtml(r.localizacao)}</td>
-      <td>${badge(r.estado)}</td>
-      <td class="num">${fmtCurrency(r.valor_sem_iva || r.valor_adjudicado)}</td>
-      <td>
-        <button class="btn btn-ghost btn-sm" onclick="openInspectDetail('${r.id}')" title="Abrir">↗</button>
-        ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="openInspectModal('${r.id}')" title="Editar">✎</button>` : ''}
-        ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteInspect('${r.id}')" title="Eliminar">🗑</button>` : ''}
-      </td>
-    </tr>
-  `;
+  // ---- Card de um pedido ----
+  // Mostra todos os campos relevantes; destaca diferenças vs primeiro do grupo (highlight a amarelo)
+  const cardPedido = (r, refRec) => {
+    const diff = (campo) => refRec && r[campo] !== refRec[campo] ? 'background:#fff8e1;border-radius:4px;padding:2px 6px;margin:-2px -6px;display:inline-block' : '';
+    const row = (label, value, campo) => `
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dotted var(--border-light);font-size:12.5px">
+        <span class="text-muted" style="white-space:nowrap">${label}</span>
+        <span style="text-align:right;${diff(campo)}">${value || '—'}</span>
+      </div>`;
+    return `
+      <div style="flex:1;min-width:280px;max-width:340px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px;background:#fff">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border-light)">
+          <strong style="color:var(--navy);font-size:13px">${r.id_pedido ? escapeHtml(r.id_pedido) : '(sem ID)'}</strong>
+          ${badge(r.estado)}
+        </div>
+        ${row('Referência', escapeHtml(r.referencia), 'referencia')}
+        ${row('Cliente', escapeHtml(r.cliente), 'cliente')}
+        ${row('Data pedido', fmtDate(r.data_pedido), 'data_pedido')}
+        ${row('Tipo serviço', escapeHtml(r.tipo_servico), 'tipo_servico')}
+        ${row('Canal', escapeHtml(r.canal_origem), 'canal_origem')}
+        ${row('Localização', escapeHtml(r.localizacao), 'localizacao')}
+        ${row('Telemóvel', escapeHtml(r.telefone), 'telefone')}
+        ${row('Email', escapeHtml(r.email), 'email')}
+        ${row('Valor s/ IVA', fmtCurrency(r.valor_sem_iva), 'valor_sem_iva')}
+        ${row('Valor adjudicado', fmtCurrency(r.valor_adjudicado), 'valor_adjudicado')}
+        ${row('Custo', fmtCurrency(r.custo), 'custo')}
+        ${row('Data envio', fmtDate(r.data_envio), 'data_envio')}
+        ${row('Data adjudicação', fmtDate(r.data_adjudicacao), 'data_adjudicacao')}
+        ${row('Data agendada', fmtDate(r.data_agendada), 'data_agendada')}
+        ${row('Data realização', fmtDate(r.data_realizacao), 'data_realizacao')}
+        ${row('Data relatório', fmtDate(r.data_relatorio), 'data_relatorio')}
+        ${row('Fat. NIF', escapeHtml(r.fat_nif), 'fat_nif')}
+        ${row('Tranche 1', fmtCurrency(r.fat1_valor), 'fat1_valor')}
+        ${row('Tranche 2', fmtCurrency(r.fat2_valor), 'fat2_valor')}
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light)">
+          <button class="btn btn-ghost btn-sm" onclick="openInspectDetail('${r.id}')" title="Abrir">↗</button>
+          ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="openInspectModal('${r.id}')" title="Editar">✎</button>` : ''}
+          ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteInspect('${r.id}')" title="Eliminar">🗑</button>` : ''}
+        </div>
+      </div>`;
+  };
+
+  const grupoBloco = (titulo, valor, arr) => `
+    <div class="card" style="margin-bottom:16px">
+      <h4 style="text-align:left;padding:14px 18px">${titulo}: <span style="color:var(--gold-dark)">${escapeHtml(valor)}</span> · ${arr.length} pedidos</h4>
+      <div style="padding:0 16px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">
+        ${arr.map(r => cardPedido(r, arr[0])).join('')}
+      </div>
+    </div>`;
 
   $('#section-inspect').innerHTML = `
     <div class="page-header">
@@ -3010,6 +3037,12 @@ function renderInspectDuplicados() {
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:16px;padding:10px 14px;background:#fffbeb;border-color:#fde68a">
+      <div class="text-small" style="color:#92400e">
+        💡 Campos a <strong style="background:#fff8e1;padding:1px 6px;border-radius:4px">amarelo</strong> diferem do 1º card de cada grupo. Quanto mais amarelos, mais provavelmente são pedidos diferentes (não duplicados).
+      </div>
+    </div>
+
     ${gruposRef.length === 0 && gruposCli.length === 0 ? `
       <div class="card" style="padding:48px;text-align:center;color:var(--text-muted)">
         <div style="font-size:32px;margin-bottom:8px">✓</div>
@@ -3018,63 +3051,13 @@ function renderInspectDuplicados() {
     ` : ''}
 
     ${gruposRef.length > 0 ? `
-      <div class="card" style="margin-bottom:16px">
-        <h4>Referência repetida (${gruposRef.length} grupos)</h4>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID Pedido</th>
-                <th>Referência</th>
-                <th>Cliente</th>
-                <th>Data</th>
-                <th>Localização</th>
-                <th>Estado</th>
-                <th class="num">Valor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${gruposRef.map(([ref, arr]) => `
-                <tr style="background:var(--gold-light);font-weight:600">
-                  <td colspan="8" style="padding-left:20px">📌 Referência: "${escapeHtml(arr[0].referencia)}" · ${arr.length} pedidos</td>
-                </tr>
-                ${arr.map(r => linhaPedido(r, 'ref')).join('')}
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <h4 style="margin:16px 0 12px;color:var(--navy)">📌 Mesma Referência (${gruposRef.length} grupos)</h4>
+      ${gruposRef.map(([ref, arr]) => grupoBloco('Referência', arr[0].referencia, arr)).join('')}
     ` : ''}
 
     ${gruposCli.length > 0 ? `
-      <div class="card">
-        <h4>Cliente repetido (${gruposCli.length} grupos)</h4>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID Pedido</th>
-                <th>Referência</th>
-                <th>Cliente</th>
-                <th>Data</th>
-                <th>Localização</th>
-                <th>Estado</th>
-                <th class="num">Valor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${gruposCli.map(([cli, arr]) => `
-                <tr style="background:var(--gold-light);font-weight:600">
-                  <td colspan="8" style="padding-left:20px">👤 Cliente: "${escapeHtml(arr[0].cliente)}" · ${arr.length} pedidos</td>
-                </tr>
-                ${arr.map(r => linhaPedido(r, 'cli')).join('')}
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <h4 style="margin:16px 0 12px;color:var(--navy)">👤 Mesmo Cliente (${gruposCli.length} grupos)</h4>
+      ${gruposCli.map(([cli, arr]) => grupoBloco('Cliente', arr[0].cliente, arr)).join('')}
     ` : ''}
   `;
 }
