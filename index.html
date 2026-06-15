@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h46</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.15-08h22</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2682,6 +2682,7 @@ function renderInspect() {
           <button class="btn btn-gold" onclick="openInspectModal()">+ Novo Pedido</button>
         ` : ''}
         ${isAdmin() ? `
+          <button class="btn btn-ghost btn-sm" onclick="renumerarInspect()" title="Renumerar todos os id_pedido">🔢 Renumerar IDs</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteAllRows('inspect_pedidos','Aceitar Inspect','inspect')" title="Apagar todos os registos">🗑 Apagar tudo</button>
         ` : ''}
       </div>
@@ -3053,6 +3054,108 @@ async function limparDuplicadosExatos() {
     await reloadTable('inspect');
     renderInspect();
     showToast(`Apagados ${okBD} pedidos${okStorage ? ` + ${okStorage} anexos` : ''}${erros ? ` · ${erros} erros` : ''}`, erros ? 'error' : 'success');
+  };
+}
+
+// Renumera todos os id_pedido no formato 2026-MM-0000
+// Ordem: data_pedido asc (fallback created_at), sequência reinicia a cada mês+ano
+async function renumerarInspect() {
+  const rows = [...state.data.inspect];
+
+  // chave ordenável: data_pedido (ou created_at se vazia)
+  const dateOf = r => r.data_pedido || (r.created_at ? r.created_at.slice(0,10) : null);
+
+  // separar os que têm data daqueles sem data nenhuma
+  const comData = rows.filter(r => dateOf(r));
+  const semData = rows.filter(r => !dateOf(r));
+
+  comData.sort((a, b) => {
+    const da = dateOf(a), db = dateOf(b);
+    if (da !== db) return da < db ? -1 : 1;
+    // empate de datas → desempata por created_at
+    const ca = a.created_at || '', cb = b.created_at || '';
+    return ca < cb ? -1 : ca > cb ? 1 : 0;
+  });
+
+  // agrupar por ano-mes e atribuir sequencial
+  const updates = [];
+  const counter = {}; // 'AAAA-MM' -> contador
+  comData.forEach(r => {
+    const d = dateOf(r);
+    const yyyy = d.slice(0,4);
+    const mm = d.slice(5,7);
+    const k = `${yyyy}-${mm}`;
+    counter[k] = (counter[k] || 0) + 1;
+    const novoId = `${yyyy}-${mm}-${String(counter[k]).padStart(4, '0')}`;
+    if (r.id_pedido !== novoId) updates.push({ id: r.id, novoId, antigoId: r.id_pedido, data: d });
+  });
+
+  const preview = updates.slice(0, 20).map(u =>
+    `<tr><td>${escapeHtml(u.antigoId) || '(vazio)'}</td><td style="color:var(--success);font-weight:600">${u.novoId}</td><td>${fmtDate(u.data)}</td></tr>`
+  ).join('');
+  const extra = updates.length > 20 ? `<tr><td colspan="3" class="text-small text-muted">... e mais ${updates.length - 20}</td></tr>` : '';
+  const semDataAviso = semData.length > 0
+    ? `<p class="text-small" style="color:var(--danger)">⚠ ${semData.length} pedido(s) sem data_pedido e sem created_at — serão ignorados.</p>`
+    : '';
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">Renumerar IDs (AAAA-MM-0000)</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p>Vai reescrever <strong>${updates.length}</strong> id_pedido em <strong>${state.data.inspect.length}</strong> pedidos totais.</p>
+      <p>Formato: <code>AAAA-MM-0000</code>. Sequência reinicia em cada mês. Ordem: data_pedido (fallback created_at).</p>
+      ${semDataAviso}
+      ${updates.length === 0 ? '<p>Nenhum pedido precisa de renumeração.</p>' : `
+        <div class="table-wrapper" style="max-height:340px;overflow-y:auto;margin-top:12px">
+          <table class="data-table">
+            <thead><tr><th>Antigo</th><th>Novo</th><th>Data</th></tr></thead>
+            <tbody>${preview}${extra}</tbody>
+          </table>
+        </div>
+      `}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      ${updates.length > 0 ? `<button class="btn btn-danger" id="btn-confirmar-renum">Continuar →</button>` : ''}
+    </div>
+  `, 'lg');
+
+  if (updates.length === 0) return;
+
+  $('#btn-confirmar-renum').onclick = async () => {
+    const confirmText = prompt(`Para confirmar a renumeração de ${updates.length} pedidos, escreve APAGAR em maiúsculas:`);
+    if (confirmText !== 'APAGAR') { showToast('Cancelado', ''); return; }
+    closeModal();
+
+    // Estratégia: como a coluna id_pedido pode ter UNIQUE, fazemos em 2 passos
+    // Passo 1: prefixar todos com "tmp_" para libertar os valores antigos
+    // Passo 2: atribuir os novos valores definitivos
+    const btnLoad = showToast(`A renumerar ${updates.length}...`, '');
+
+    let okStep1 = 0, okStep2 = 0, erros = 0;
+
+    // Passo 1: tmp_<uuid_prefixo>
+    for (let i = 0; i < updates.length; i++) {
+      const u = updates[i];
+      const tmp = 'tmp_' + u.id.slice(0, 8) + '_' + i;
+      const { error } = await sb.from('inspect_pedidos').update({ id_pedido: tmp }).eq('id', u.id);
+      if (error) { erros++; console.error('step1', u, error); }
+      else okStep1++;
+    }
+
+    // Passo 2: atribuir o novo id_pedido
+    for (let i = 0; i < updates.length; i++) {
+      const u = updates[i];
+      const { error } = await sb.from('inspect_pedidos').update({ id_pedido: u.novoId }).eq('id', u.id);
+      if (error) { erros++; console.error('step2', u, error); }
+      else okStep2++;
+    }
+
+    await reloadTable('inspect');
+    renderInspect();
+    showToast(`Renumerados ${okStep2} pedidos${erros ? ` · ${erros} erros` : ''}`, erros ? 'error' : 'success');
   };
 }
 
