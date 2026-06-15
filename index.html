@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h34</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h46</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2951,6 +2951,111 @@ function exportFinanceiro() {
 // ============================================================
 // ACEITAR INSPECT — VISTA DE ANÁLISE
 // ============================================================
+// Identifica grupos de pedidos *exatamente iguais* em 6 campos-chave
+// (referência + cliente + data_pedido + tipo_servico + valor_sem_iva + localizacao)
+// Para cada grupo mantém o mais antigo (created_at asc) e devolve os IDs a apagar.
+function calcularDuplicadosExatos() {
+  const norm = s => (s ?? '').toString().trim().toLowerCase();
+  const numKey = v => v == null || v === '' ? '' : String(Number(v));
+  const dateKey = v => v ? new Date(v).toISOString().slice(0,10) : '';
+  const keyOf = r => [
+    norm(r.referencia),
+    norm(r.cliente),
+    dateKey(r.data_pedido),
+    norm(r.tipo_servico),
+    numKey(r.valor_sem_iva),
+    norm(r.localizacao)
+  ].join('|');
+
+  const grupos = {};
+  state.data.inspect.forEach(r => {
+    const k = keyOf(r);
+    // ignora linhas sem refer e sem cliente (chave demasiado vazia)
+    if (!r.referencia && !r.cliente) return;
+    (grupos[k] = grupos[k] || []).push(r);
+  });
+
+  const aApagar = [];
+  const grupoCount = [];
+  Object.values(grupos).forEach(arr => {
+    if (arr.length < 2) return;
+    // ordenar por created_at asc; o mais antigo fica
+    arr.sort((a,b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    grupoCount.push(arr);
+    arr.slice(1).forEach(r => aApagar.push(r));
+  });
+  return { grupos: grupoCount, aApagar };
+}
+
+async function limparDuplicadosExatos() {
+  const { grupos, aApagar } = calcularDuplicadosExatos();
+  if (aApagar.length === 0) {
+    showToast('Não há duplicados exatos para apagar', '');
+    return;
+  }
+
+  const linhas = aApagar.slice(0, 15).map(r =>
+    `<tr><td>${r.id_pedido || '—'}</td><td>${escapeHtml(r.referencia) || '—'}</td><td>${escapeHtml(r.cliente)}</td><td>${fmtDate(r.data_pedido)}</td><td>${fmtCurrency(r.valor_sem_iva)}</td></tr>`
+  ).join('');
+  const extra = aApagar.length > 15 ? `<tr><td colspan="5" class="text-small text-muted">... e mais ${aApagar.length - 15}</td></tr>` : '';
+
+  showModal(`
+    <div class="modal-header">
+      <div class="modal-title">Limpar duplicados exatos</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <p>Encontrados <strong>${grupos.length}</strong> grupos com pedidos exatamente iguais nos 6 campos-chave (referência + cliente + data_pedido + tipo_servico + valor_sem_iva + localizacao).</p>
+      <p>Vai apagar <strong style="color:var(--danger)">${aApagar.length} pedidos</strong>. De cada grupo mantém-se o <strong>mais antigo</strong>.</p>
+      <p class="text-small text-muted">Os anexos no Storage destes pedidos também serão apagados.</p>
+      <div class="table-wrapper" style="max-height:300px;overflow-y:auto;margin-top:12px">
+        <table class="data-table">
+          <thead><tr><th>ID</th><th>Referência</th><th>Cliente</th><th>Data</th><th class="num">Valor</th></tr></thead>
+          <tbody>${linhas}${extra}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirmar-limpar">Continuar →</button>
+    </div>
+  `, 'lg');
+
+  $('#btn-confirmar-limpar').onclick = async () => {
+    const confirmText = prompt(`Para confirmar a eliminação de ${aApagar.length} pedidos, escreve APAGAR em maiúsculas:`);
+    if (confirmText !== 'APAGAR') { showToast('Cancelado', ''); return; }
+    closeModal();
+
+    let okBD = 0, okStorage = 0, erros = 0;
+    const ids = aApagar.map(r => r.id);
+
+    // 1) Apagar anexos no Storage (descobrir paths via inspect_anexos)
+    const { data: anexos } = await sb.from('inspect_anexos').select('storage_path').in('pedido_id', ids);
+    if (anexos && anexos.length) {
+      const paths = anexos.map(a => a.storage_path).filter(Boolean);
+      if (paths.length) {
+        const { error: stErr } = await sb.storage.from('inspect-anexos').remove(paths);
+        if (!stErr) okStorage = paths.length;
+      }
+      // apagar registos em inspect_anexos
+      await sb.from('inspect_anexos').delete().in('pedido_id', ids);
+    }
+
+    // 2) Apagar pedidos em chunks (Postgres in() lida bem, mas por segurança em 200)
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const { error } = await sb.from('inspect_pedidos').delete().in('id', chunk);
+      if (error) erros += chunk.length;
+      else okBD += chunk.length;
+    }
+
+    await reloadTable('inspect');
+    renderInspect();
+    showToast(`Apagados ${okBD} pedidos${okStorage ? ` + ${okStorage} anexos` : ''}${erros ? ` · ${erros} erros` : ''}`, erros ? 'error' : 'success');
+  };
+}
+
 function renderInspectDuplicados() {
   const rows = state.data.inspect;
   const norm = s => (s || '').toString().trim().toLowerCase();
@@ -3038,8 +3143,11 @@ function renderInspectDuplicados() {
     </div>
 
     <div class="card" style="margin-bottom:16px;padding:10px 14px;background:#fffbeb;border-color:#fde68a">
-      <div class="text-small" style="color:#92400e">
-        💡 Campos a <strong style="background:#fff8e1;padding:1px 6px;border-radius:4px">amarelo</strong> diferem do 1º card de cada grupo. Quanto mais amarelos, mais provavelmente são pedidos diferentes (não duplicados).
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="text-small" style="color:#92400e">
+          💡 Campos a <strong style="background:#fff8e1;padding:1px 6px;border-radius:4px">amarelo</strong> diferem do 1º card de cada grupo. Quanto mais amarelos, mais provavelmente são pedidos diferentes (não duplicados).
+        </div>
+        ${isAdmin() ? `<button class="btn btn-danger btn-sm" onclick="limparDuplicadosExatos()">🧹 Limpar duplicados exatos</button>` : ''}
       </div>
     </div>
 
