@@ -869,7 +869,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.06.12-08h13</span>
+          <span class="app-version" title="Versão da aplicação">v2026.06.15-07h12</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -2634,6 +2634,10 @@ function renderInspect() {
     renderInspectFinanceiro();
     return;
   }
+  if (state.inspectView === 'duplicados') {
+    renderInspectDuplicados();
+    return;
+  }
 
   const { search, estado } = state.filters.inspect;
   const { key, dir } = state.sort.inspect;
@@ -2668,6 +2672,7 @@ function renderInspect() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn active" onclick="switchInspectView('listagem')">Listagem</button>
+          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
@@ -2811,6 +2816,7 @@ function renderInspectFinanceiro() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn active" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
@@ -2945,6 +2951,134 @@ function exportFinanceiro() {
 // ============================================================
 // ACEITAR INSPECT — VISTA DE ANÁLISE
 // ============================================================
+function renderInspectDuplicados() {
+  const rows = state.data.inspect;
+
+  // Indexar por referência (lowercase trim) e por cliente (lowercase trim)
+  const norm = s => (s || '').toString().trim().toLowerCase();
+
+  const porRef = {};
+  const porCliente = {};
+  rows.forEach(r => {
+    const rRef = norm(r.referencia);
+    const rCli = norm(r.cliente);
+    if (rRef) (porRef[rRef] = porRef[rRef] || []).push(r);
+    if (rCli) (porCliente[rCli] = porCliente[rCli] || []).push(r);
+  });
+
+  // Grupos com 2+ pedidos
+  const gruposRef = Object.entries(porRef).filter(([, arr]) => arr.length > 1);
+  const gruposCli = Object.entries(porCliente).filter(([, arr]) => arr.length > 1);
+
+  // Conjunto de IDs envolvidos (para contadores)
+  const idsRef = new Set();
+  gruposRef.forEach(([, arr]) => arr.forEach(r => idsRef.add(r.id)));
+  const idsCli = new Set();
+  gruposCli.forEach(([, arr]) => arr.forEach(r => idsCli.add(r.id)));
+  const totalEnvolvidos = new Set([...idsRef, ...idsCli]).size;
+
+  const linhaPedido = (r, motivo) => `
+    <tr>
+      <td>${r.id_pedido ? escapeHtml(r.id_pedido) : '—'}</td>
+      <td>${r.referencia ? escapeHtml(r.referencia) : '—'}</td>
+      <td>${escapeHtml(r.cliente)}</td>
+      <td>${fmtDate(r.data_pedido)}</td>
+      <td>${escapeHtml(r.localizacao)}</td>
+      <td>${badge(r.estado)}</td>
+      <td class="num">${fmtCurrency(r.valor_sem_iva || r.valor_adjudicado)}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openInspectDetail('${r.id}')" title="Abrir">↗</button>
+        ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="openInspectModal('${r.id}')" title="Editar">✎</button>` : ''}
+        ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="deleteInspect('${r.id}')" title="Eliminar">🗑</button>` : ''}
+      </td>
+    </tr>
+  `;
+
+  $('#section-inspect').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Aceitar Inspect — Duplicados</div>
+        <div class="page-subtitle">${totalEnvolvidos} pedido(s) envolvidos · ${gruposRef.length} grupo(s) por referência · ${gruposCli.length} grupo(s) por cliente</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchInspectView('duplicados')">Duplicados</button>
+          <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
+        </div>
+      </div>
+    </div>
+
+    ${gruposRef.length === 0 && gruposCli.length === 0 ? `
+      <div class="card" style="padding:48px;text-align:center;color:var(--text-muted)">
+        <div style="font-size:32px;margin-bottom:8px">✓</div>
+        <div>Sem duplicados encontrados.</div>
+      </div>
+    ` : ''}
+
+    ${gruposRef.length > 0 ? `
+      <div class="card" style="margin-bottom:16px">
+        <h4>Referência repetida (${gruposRef.length} grupos)</h4>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID Pedido</th>
+                <th>Referência</th>
+                <th>Cliente</th>
+                <th>Data</th>
+                <th>Localização</th>
+                <th>Estado</th>
+                <th class="num">Valor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${gruposRef.map(([ref, arr]) => `
+                <tr style="background:var(--gold-light);font-weight:600">
+                  <td colspan="8" style="padding-left:20px">📌 Referência: "${escapeHtml(arr[0].referencia)}" · ${arr.length} pedidos</td>
+                </tr>
+                ${arr.map(r => linhaPedido(r, 'ref')).join('')}
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
+
+    ${gruposCli.length > 0 ? `
+      <div class="card">
+        <h4>Cliente repetido (${gruposCli.length} grupos)</h4>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID Pedido</th>
+                <th>Referência</th>
+                <th>Cliente</th>
+                <th>Data</th>
+                <th>Localização</th>
+                <th>Estado</th>
+                <th class="num">Valor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${gruposCli.map(([cli, arr]) => `
+                <tr style="background:var(--gold-light);font-weight:600">
+                  <td colspan="8" style="padding-left:20px">👤 Cliente: "${escapeHtml(arr[0].cliente)}" · ${arr.length} pedidos</td>
+                </tr>
+                ${arr.map(r => linhaPedido(r, 'cli')).join('')}
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
+  `;
+}
+
 function renderInspectAnalise() {
   const data = state.data.inspect;
 
@@ -2982,6 +3116,7 @@ function renderInspectAnalise() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
         </div>
