@@ -878,7 +878,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.07.14-12h54</span>
+          <span class="app-version" title="Versão da aplicação">v2026.07.14-13h08</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1217,6 +1217,35 @@ function fmtNumber(v, withSign) {
   const sign = (withSign && n > 0) ? '+' : (n < 0 ? '-' : '');
   const intWithSpaces = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return sign + intWithSpaces;
+}
+
+// ===== Padrão numérico global (inputs editáveis) =====
+// Parser tolerante pt-PT: "1 234,56" -> 1234.56
+function parseNumPT(s) {
+  if (s === null || s === undefined) return NaN;
+  const clean = String(s).replace(/[\s\u00A0]/g, '').replace(',', '.');
+  return clean === '' ? NaN : parseFloat(clean);
+}
+
+// Formata para input: espaço como separador de milhares, vírgula decimal.
+// decimals = mínimo de casas (preserva mais se existirem, ex: taxas ao km)
+function fmtInputNumber(v, decimals) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return '';
+  const actualDec = (String(v).split('.')[1] || '').length;
+  const d = Math.max(decimals || 0, Math.min(actualDec, 6));
+  const fixed = Math.abs(n).toFixed(d);
+  const [i, dec] = fixed.split('.');
+  const int = i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (n < 0 ? '-' : '') + int + (dec ? ',' + dec : '');
+}
+
+// onblur dos inputs numéricos: normaliza para o formato padrão
+function numInputBlur(el) {
+  const n = parseNumPT(el.value);
+  el.value = isNaN(n) ? '' : fmtInputNumber(n, parseInt(el.dataset.decimals || '0', 10));
+  if (el.oninput) el.oninput();
 }
 
 function fmtDate(v) {
@@ -5110,7 +5139,7 @@ function openFrotaModal(id) {
             <div class="form-row-3">
               <div class="form-group">
                 <label>Kms Contratados</label>
-                <input type="number" step="1" class="form-control" name="kms_contratados" value="${v.kms_contratados ?? ''}" oninput="updateFrotaCalc()">
+                <input type="text" inputmode="decimal" class="form-control" name="kms_contratados" data-decimals="0" value="${fmtInputNumber(v.kms_contratados, 0)}" oninput="updateFrotaCalc()" onblur="numInputBlur(this)">
               </div>
               <div class="form-group">
                 <label>Kms / Ano</label>
@@ -5124,28 +5153,28 @@ function openFrotaModal(id) {
             <div class="form-row">
               <div class="form-group">
                 <label>Valor Km + (€)</label>
-                <input type="number" step="0.0001" class="form-control" name="valor_km_mais" value="${v.valor_km_mais ?? ''}" placeholder="custo por km a mais">
+                <input type="text" inputmode="decimal" class="form-control" name="valor_km_mais" data-decimals="2" value="${fmtInputNumber(v.valor_km_mais, 2)}" placeholder="custo por km a mais" onblur="numInputBlur(this)">
               </div>
               <div class="form-group">
                 <label>Valor Km − (€)</label>
-                <input type="number" step="0.0001" class="form-control" name="valor_km_menos" value="${v.valor_km_menos ?? ''}" placeholder="crédito por km a menos">
+                <input type="text" inputmode="decimal" class="form-control" name="valor_km_menos" data-decimals="2" value="${fmtInputNumber(v.valor_km_menos, 2)}" placeholder="crédito por km a menos" onblur="numInputBlur(this)">
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Mensalidade (€)</label>
-                <input type="number" step="0.01" class="form-control" name="mensalidade" value="${v.mensalidade ?? ''}">
+                <input type="text" inputmode="decimal" class="form-control" name="mensalidade" data-decimals="2" value="${fmtInputNumber(v.mensalidade, 2)}" onblur="numInputBlur(this)">
               </div>
               <div class="form-group">
                 <label>Mensalidade GPS (€)</label>
-                <input type="number" step="0.01" class="form-control" name="mensalidade_gps" value="${v.mensalidade_gps ?? ''}">
+                <input type="text" inputmode="decimal" class="form-control" name="mensalidade_gps" data-decimals="2" value="${fmtInputNumber(v.mensalidade_gps, 2)}" onblur="numInputBlur(this)">
               </div>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label>Seguro (€)</label>
-              <input type="number" step="0.01" class="form-control" name="seguro_valor" value="${v.seguro_valor ?? ''}">
+              <input type="text" inputmode="decimal" class="form-control" name="seguro_valor" data-decimals="2" value="${fmtInputNumber(v.seguro_valor, 2)}" onblur="numInputBlur(this)">
             </div>
             <div class="form-group">
               <label>Periodicidade</label>
@@ -5215,10 +5244,17 @@ function updateFrotaCalc() {
   if (!form) return;
   const ini = form.inicio_contrato?.value;
   const fim = form.fim_contrato?.value;
-  const kms = parseFloat(form.kms_contratados?.value);
+  const kms = parseNumPT(form.kms_contratados?.value);
   const d = frotaCalcDerived({ inicio_contrato: ini, fim_contrato: fim, kms_contratados: kms });
   const durEl = $('#frota-duracao'), anoEl = $('#frota-kmsano'), mesEl = $('#frota-kmsmes');
-  if (durEl) durEl.value = d.duracaoAnos ? d.duracaoAnos.toFixed(1) + ' anos (' + Math.round(d.mesesContrato) + ' meses)' : '—';
+  if (durEl) {
+    if (d.duracaoAnos) {
+      // Inteiro sem casas decimais ("5 anos"); caso contrário 1 casa com vírgula ("4,5 anos")
+      const inteiro = Math.abs(d.duracaoAnos - Math.round(d.duracaoAnos)) < 0.05;
+      const anosStr = inteiro ? String(Math.round(d.duracaoAnos)) : d.duracaoAnos.toFixed(1).replace('.', ',');
+      durEl.value = anosStr + ' ' + (anosStr === '1' ? 'ano' : 'anos') + ' (' + Math.round(d.mesesContrato) + ' meses)';
+    } else durEl.value = '—';
+  }
   if (anoEl) anoEl.value = d.kmsAno ? fmtNumber(d.kmsAno) + ' km' : '—';
   if (mesEl) mesEl.value = d.kmsMes ? fmtNumber(d.kmsMes) + ' km' : '—';
 }
@@ -5236,7 +5272,7 @@ async function saveFrota(id) {
   if (!rec.matricula) { showToast('Matrícula obrigatória', 'error'); return; }
 
   ['kms_contratados','valor_km_mais','valor_km_menos','mensalidade','mensalidade_gps','seguro_valor'].forEach(k => {
-    if (rec[k]) rec[k] = parseFloat(rec[k]);
+    if (rec[k]) { const n = parseNumPT(rec[k]); rec[k] = isNaN(n) ? null : n; }
   });
 
   // Se própria, limpa campos de contrato
@@ -5446,7 +5482,7 @@ function openControloModal(viaturaId, fromView) {
           </div>
           <div class="form-group">
             <label>Kms atuais <span class="required">*</span></label>
-            <input type="number" step="1" class="form-control" id="ctrl-kms" placeholder="ex: 23500">
+            <input type="text" inputmode="decimal" class="form-control" id="ctrl-kms" data-decimals="0" placeholder="ex: 23 500" onblur="numInputBlur(this)">
           </div>
         </div>
         <div id="ctrl-preview" class="text-small text-muted" style="margin-top:8px"></div>
@@ -5464,7 +5500,7 @@ function openControloModal(viaturaId, fromView) {
     const vv = getViatura();
     if (!vv) { $('#ctrl-preview').innerHTML = ''; return; }
     const data = $('#ctrl-data').value;
-    const kms = parseFloat($('#ctrl-kms').value);
+    const kms = parseNumPT($('#ctrl-kms').value);
     const r = computeControlo(vv, data, kms);
     if (!r) { $('#ctrl-preview').innerHTML = ''; return; }
     $('#ctrl-preview').innerHTML = `
@@ -5482,7 +5518,7 @@ function openControloModal(viaturaId, fromView) {
     const vv = getViatura();
     if (!vv) { showToast('Seleciona a viatura', 'error'); return; }
     const data = $('#ctrl-data').value;
-    const kms = parseFloat($('#ctrl-kms').value);
+    const kms = parseNumPT($('#ctrl-kms').value);
     if (!data || isNaN(kms)) { showToast('Preenche data e kms', 'error'); return; }
     const r = computeControlo(vv, data, kms);
     const { error } = await sb.from('frota_controlos').insert({
