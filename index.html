@@ -796,6 +796,15 @@
       background: var(--navy);
       color: white;
     }
+    /* Tabs de formulário: ocupam toda a largura, opções distribuídas */
+    .form-tabs {
+      display: flex;
+      width: 100%;
+    }
+    .form-tabs .tab-btn {
+      flex: 1;
+      text-align: center;
+    }
 
     /* Chart grid */
     .chart-grid {
@@ -869,7 +878,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.07.13-22h52</span>
+          <span class="app-version" title="Versão da aplicação">v2026.07.14-10h07</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -5021,7 +5030,7 @@ function openFrotaModal(id) {
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
-      <div class="tabs" id="frota-form-tabs" style="margin-bottom:16px">
+      <div class="tabs form-tabs" id="frota-form-tabs" style="margin-bottom:16px">
         <button type="button" class="tab-btn active" data-tab="identificacao" onclick="switchFrotaFormTab('identificacao')">Identificação</button>
         <button type="button" class="tab-btn" data-tab="contrato" id="ftab-btn-contrato" onclick="switchFrotaFormTab('contrato')" style="display:${isContrato?'':'none'}">Contrato</button>
         <button type="button" class="tab-btn" data-tab="valores" onclick="switchFrotaFormTab('valores')">Valores</button>
@@ -5212,6 +5221,21 @@ function openFrotaModal(id) {
   `, 'lg');
 
   updateFrotaCalc();
+  sizeFrotaFormPanes();
+}
+
+function sizeFrotaFormPanes() {
+  // Mede o painel mais alto e fixa a mesma altura mínima em todos,
+  // para o modal não mudar de tamanho ao trocar de tab
+  const panes = document.querySelectorAll('.frota-form-pane');
+  let max = 0;
+  panes.forEach(p => {
+    const prev = p.style.display;
+    p.style.display = 'block';
+    max = Math.max(max, p.offsetHeight);
+    p.style.display = prev;
+  });
+  panes.forEach(p => p.style.minHeight = max + 'px');
 }
 
 function switchFrotaFormTab(tab) {
