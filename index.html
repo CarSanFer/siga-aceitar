@@ -878,7 +878,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.07.14-10h07</span>
+          <span class="app-version" title="Versão da aplicação">v2026.07.14-12h54</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -4867,7 +4867,7 @@ function renderFrotaListagem() {
                 const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
                 const dur = v._duracao_anos != null ? v._duracao_anos + ' ano' + (v._duracao_anos===1?'':'s') : '—';
                 return `
-                <tr class="clickable" onclick="openFrotaDetail('${v.id}')">
+                <tr class="clickable" onclick="openFrotaFicha('${v.id}')">
                   <td class="cen"><strong>${escapeHtml(v.matricula)}</strong></td>
                   <td>${escapeHtml(v.viatura)}</td>
                   <td class="cen">${escapeHtml(v.tipo)}</td>
@@ -4940,6 +4940,7 @@ function renderFrotaControlo() {
       </div>
       <div class="page-actions">
         ${frotaTabs('controlo')}
+        ${canEdit() ? `<button class="btn btn-gold" onclick="openControloModal(null, true)">+ Novo Controlo</button>` : ''}
       </div>
     </div>
 
@@ -5019,9 +5020,6 @@ function renderFrotaPreserveFocus() {
 
 function openFrotaModal(id) {
   const v = id ? state.data.frota.find(x => x.id === id) : { tipo: 'Própria' };
-  const controlos = id ? state.data.frotaControlos
-    .filter(c => c.viatura_id === id)
-    .sort((a, b) => new Date(b.data_controlo) - new Date(a.data_controlo)) : [];
   const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
 
   showModal(`
@@ -5035,7 +5033,6 @@ function openFrotaModal(id) {
         <button type="button" class="tab-btn" data-tab="contrato" id="ftab-btn-contrato" onclick="switchFrotaFormTab('contrato')" style="display:${isContrato?'':'none'}">Contrato</button>
         <button type="button" class="tab-btn" data-tab="valores" onclick="switchFrotaFormTab('valores')">Valores</button>
         <button type="button" class="tab-btn" data-tab="extras" onclick="switchFrotaFormTab('extras')">Extras</button>
-        <button type="button" class="tab-btn" data-tab="controlo" id="ftab-btn-controlo" onclick="switchFrotaFormTab('controlo')" style="display:${isContrato?'':'none'}">Controlo</button>
       </div>
       <form id="form-frota" onsubmit="return false">
 
@@ -5081,11 +5078,7 @@ function openFrotaModal(id) {
           </div>
           <div class="form-group">
             <label>Observações</label>
-            <textarea class="form-control" name="observacoes" rows="3" style="min-height:80px">${escapeHtml(v.observacoes)}</textarea>
-          </div>
-          <div class="form-group">
-            <label>Notas</label>
-            <textarea class="form-control" name="notas" rows="2" style="min-height:60px">${escapeHtml(v.notas)}</textarea>
+            <textarea class="form-control" name="observacoes" rows="5" style="min-height:140px">${escapeHtml(v.observacoes)}</textarea>
           </div>
         </div>
 
@@ -5173,45 +5166,6 @@ function openFrotaModal(id) {
           <div class="text-small text-muted" style="padding:24px 0;text-align:center">Sem conteúdo — a definir.</div>
         </div>
 
-        <!-- ===== Controlo ===== -->
-        <div class="frota-form-pane" data-tab="controlo" style="display:none">
-          ${!id ? `<div class="text-small text-muted" style="padding:24px 0;text-align:center">Disponível após criar a viatura.</div>` : `
-            <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-              ${canEdit() ? `<button type="button" class="btn btn-gold btn-sm" onclick="closeModal();openControloModal('${id}')">+ Novo Controlo</button>` : ''}
-            </div>
-            ${controlos.length === 0 ? `<div class="text-small text-muted">Ainda sem controlos registados.</div>` : `
-              <div class="table-wrapper">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Data</th>
-                      <th class="num">Kms atuais</th>
-                      <th class="num">Kms previstos</th>
-                      <th class="num">Desvio</th>
-                      <th class="num">Custo momento</th>
-                      <th class="num">Kms fim (est.)</th>
-                      <th class="num">Custo fim (est.)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${controlos.map(c => `
-                      <tr>
-                        <td>${fmtDate(c.data_controlo)}</td>
-                        <td class="num">${fmtNumber(c.kms_atuais)}</td>
-                        <td class="num">${fmtNumber(c.kms_previstos)}</td>
-                        <td class="num" style="color:${c.desvio > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtNumber(c.desvio, true)}</td>
-                        <td class="num">${fmtCurrency(c.custo_momento)}</td>
-                        <td class="num">${fmtNumber(c.kms_extrapolados)}</td>
-                        <td class="num" style="color:${c.custo_extrapolado > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${fmtCurrency(c.custo_extrapolado)}</td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-            `}
-          `}
-        </div>
-
       </form>
     </div>
     <div class="modal-footer">
@@ -5247,14 +5201,12 @@ function toggleFrotaContrato() {
   const tipo = $('#frota-tipo').value;
   const isContrato = tipo !== 'Própria';
   const btnContrato = $('#ftab-btn-contrato');
-  const btnControlo = $('#ftab-btn-controlo');
   if (btnContrato) btnContrato.style.display = isContrato ? '' : 'none';
-  if (btnControlo) btnControlo.style.display = isContrato ? '' : 'none';
   const valContrato = $('#frota-valores-contrato');
   if (valContrato) valContrato.style.display = isContrato ? 'block' : 'none';
   if (!isContrato) {
     const active = document.querySelector('#frota-form-tabs .tab-btn.active');
-    if (active && (active.dataset.tab === 'contrato' || active.dataset.tab === 'controlo')) switchFrotaFormTab('identificacao');
+    if (active && active.dataset.tab === 'contrato') switchFrotaFormTab('identificacao');
   }
 }
 
@@ -5457,18 +5409,36 @@ function openFrotaDetail(id) {
   `, 'lg');
 }
 
-function openControloModal(viaturaId) {
-  const v = state.data.frota.find(x => x.id === viaturaId);
-  if (!v) return;
+function openFrotaFicha(id) {
+  // Router: editores abrem a ficha editável (menus); restantes veem o detalhe
+  if (canEdit()) openFrotaModal(id); else openFrotaDetail(id);
+}
+
+function openControloModal(viaturaId, fromView) {
+  // Sem viaturaId (aberto a partir da vista Controlo): mostra seletor de viatura
+  const v = viaturaId ? state.data.frota.find(x => x.id === viaturaId) : null;
+  if (viaturaId && !v) return;
+  const elegiveis = state.data.frota
+    .filter(x => x.tipo === 'Leasing' || x.tipo === 'Renting')
+    .sort((a, b) => (a.matricula || '').localeCompare(b.matricula || ''));
   const today = new Date().toISOString().slice(0,10);
 
   showModal(`
     <div class="modal-header">
-      <div class="modal-title">Controlo de Kms — ${escapeHtml(v.matricula)}</div>
+      <div class="modal-title">Controlo de Kms${v ? ' — ' + escapeHtml(v.matricula) : ''}</div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body">
       <form id="form-controlo" onsubmit="return false">
+        ${!v ? `
+          <div class="form-group">
+            <label>Viatura <span class="required">*</span></label>
+            <select class="form-control" id="ctrl-viatura">
+              <option value="">— Selecionar —</option>
+              ${elegiveis.map(x => `<option value="${x.id}">${escapeHtml(x.matricula)} — ${escapeHtml(x.viatura)}${x.utilizador ? ' (' + escapeHtml(x.utilizador) + ')' : ''}</option>`).join('')}
+            </select>
+          </div>
+        ` : ''}
         <div class="form-row">
           <div class="form-group">
             <label>Data do controlo <span class="required">*</span></label>
@@ -5488,10 +5458,14 @@ function openControloModal(viaturaId) {
     </div>
   `, 'sm');
 
+  const getViatura = () => v || state.data.frota.find(x => x.id === $('#ctrl-viatura')?.value);
+
   const calc = () => {
+    const vv = getViatura();
+    if (!vv) { $('#ctrl-preview').innerHTML = ''; return; }
     const data = $('#ctrl-data').value;
     const kms = parseFloat($('#ctrl-kms').value);
-    const r = computeControlo(v, data, kms);
+    const r = computeControlo(vv, data, kms);
     if (!r) { $('#ctrl-preview').innerHTML = ''; return; }
     $('#ctrl-preview').innerHTML = `
       Kms previstos: <strong>${fmtNumber(r.kms_previstos)}</strong> ·
@@ -5502,14 +5476,17 @@ function openControloModal(viaturaId) {
   };
   $('#ctrl-data').addEventListener('input', calc);
   $('#ctrl-kms').addEventListener('input', calc);
+  $('#ctrl-viatura')?.addEventListener('change', calc);
 
   $('#ctrl-confirm').onclick = async () => {
+    const vv = getViatura();
+    if (!vv) { showToast('Seleciona a viatura', 'error'); return; }
     const data = $('#ctrl-data').value;
     const kms = parseFloat($('#ctrl-kms').value);
     if (!data || isNaN(kms)) { showToast('Preenche data e kms', 'error'); return; }
-    const r = computeControlo(v, data, kms);
+    const r = computeControlo(vv, data, kms);
     const { error } = await sb.from('frota_controlos').insert({
-      viatura_id: viaturaId,
+      viatura_id: vv.id,
       data_controlo: data,
       kms_atuais: kms,
       kms_previstos: r?.kms_previstos ?? null,
@@ -5521,7 +5498,7 @@ function openControloModal(viaturaId) {
     if (error) { showToast('Erro: ' + error.message, 'error'); return; }
     closeModal();
     await reloadTable('frotaControlos');
-    openFrotaDetail(viaturaId);
+    if (fromView) renderFrota(); else openFrotaDetail(vv.id);
     showToast('Controlo registado', 'success');
   };
 }
