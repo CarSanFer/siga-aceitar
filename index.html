@@ -489,6 +489,16 @@
       font-style: italic;
     }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
+    /* Padrão global: todos os cabeçalhos de tabela centrados (valores mantêm o seu alinhamento) */
+    .data-table th { text-align: center !important; }
+    /* Cabeçalho de secção colapsável */
+    .collapse-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 18px; cursor: pointer; user-select: none;
+    }
+    .collapse-head:hover { background: var(--bg-muted); }
+    .collapse-title { font-weight: 700; color: var(--navy); font-size: 14px; }
+    .dash-card-title { font-weight: 700; color: var(--navy); font-size: 14px; padding: 14px 18px 0 18px; }
     .cen { text-align: center; }
 
     /* Cabeçalhos da listagem com ordenação: sempre centrados e bold */
@@ -878,7 +888,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.07.21-06h49</span>
+          <span class="app-version" title="Versão da aplicação">v2026.07.21-07h32</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -4802,7 +4812,7 @@ function frotaTabs(active) {
     <div class="tabs">
       <button class="tab-btn ${active==='listagem'?'active':''}" onclick="switchFrotaView('listagem')">Listagem</button>
       <button class="tab-btn ${active==='controlo'?'active':''}" onclick="switchFrotaView('controlo')">Controlo</button>
-      <button class="tab-btn ${active==='financeiro'?'active':''}" onclick="switchFrotaView('financeiro')">Financeiro</button>
+      <button class="tab-btn ${active==='financeiro'?'active':''}" onclick="switchFrotaView('financeiro')">Custos</button>
       <button class="tab-btn ${active==='analise'?'active':''}" onclick="switchFrotaView('analise')">Análise</button>
     </div>`;
 }
@@ -4842,6 +4852,9 @@ function renderFrotaListagem() {
 
   const arrow = (k) => key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
 
+  if (!state.ui) state.ui = {};
+  const listExpanded = !!state.ui.frotaListExpanded || !!f.search; // pesquisa ativa expande automaticamente
+
   $('#section-frota').innerHTML = `
     <div class="page-header">
       <div>
@@ -4849,6 +4862,8 @@ function renderFrotaListagem() {
         <div class="page-subtitle">${enriched.length} viatura(s)</div>
       </div>
       <div class="page-actions">
+        <input type="text" class="form-control search" id="frota-search" style="width:250px" placeholder="Pesquisar viatura..."
+               value="${escapeHtml(f.search)}" oninput="state.filters.frota.search = this.value; renderFrotaPreserveFocus();">
         ${frotaTabs('listagem')}
         <button class="btn btn-secondary" onclick="exportFrota()">⬇ Export XLSX</button>
         ${canEdit() ? `<button class="btn btn-gold" onclick="openFrotaModal()">+ Nova Viatura</button>` : ''}
@@ -4856,18 +4871,12 @@ function renderFrotaListagem() {
       </div>
     </div>
 
-    <div class="card">
-      <div class="filter-bar">
-        <input type="text" class="form-control search" id="frota-search" placeholder="Pesquisar matrícula, viatura, empresa, utilizador..."
-               value="${escapeHtml(f.search)}" oninput="state.filters.frota.search = this.value; renderFrotaPreserveFocus();">
-        <select class="form-control" onchange="state.filters.frota.tipo = this.value; renderFrota();">
-          <option value="" ${f.tipo===''?'selected':''}>Todos os tipos</option>
-          <option value="Própria" ${f.tipo==='Própria'?'selected':''}>Própria</option>
-          <option value="Leasing" ${f.tipo==='Leasing'?'selected':''}>Leasing</option>
-          <option value="Renting" ${f.tipo==='Renting'?'selected':''}>Renting</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="state.filters.frota={search:'',tipo:''};renderFrota();">Limpar</button>
+    <div class="card" style="margin-bottom:24px">
+      <div class="collapse-head" onclick="toggleFrotaList()">
+        <div class="collapse-title">Listagem de viaturas <span style="color:var(--text-muted);font-weight:600">(${enriched.length})</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();toggleFrotaList()">${listExpanded ? '▾ Colapsar' : '▸ Expandir'}</button>
       </div>
+      ${!listExpanded ? '' : `
       <div class="table-wrapper">
         <table class="data-table sortable-listing">
           <thead>
@@ -4876,13 +4885,12 @@ function renderFrotaListagem() {
               <th class="sortable" onclick="sortFrota('viatura')">Viatura${arrow('viatura')}</th>
               <th class="sortable" onclick="sortFrota('tipo')">Tipo${arrow('tipo')}</th>
               <th class="sortable" onclick="sortFrota('empresa')">Empresa${arrow('empresa')}</th>
-              <th class="sortable" onclick="sortFrota('inicio_contrato')">Início Contrato${arrow('inicio_contrato')}</th>
+              <th class="sortable" onclick="sortFrota('inicio_contrato')">Início${arrow('inicio_contrato')}</th>
               <th class="sortable" onclick="sortFrota('_duracao_anos')">Duração${arrow('_duracao_anos')}</th>
-              <th class="sortable" onclick="sortFrota('fim_contrato')">Fim Contrato${arrow('fim_contrato')}</th>
+              <th class="sortable" onclick="sortFrota('fim_contrato')">Fim${arrow('fim_contrato')}</th>
               <th class="sortable num" onclick="sortFrota('mensalidade')">Mensalidade${arrow('mensalidade')}</th>
               <th class="sortable num" onclick="sortFrota('mensalidade_gps')">GPS${arrow('mensalidade_gps')}</th>
               <th class="sortable num" onclick="sortFrota('seguro_valor')">Seguro${arrow('seguro_valor')}</th>
-              <th class="sortable" onclick="sortFrota('seguro_periodicidade')">Periodicidade${arrow('seguro_periodicidade')}</th>
               <th class="sortable num" onclick="sortFrota('valor_km_mais')">Km +${arrow('valor_km_mais')}</th>
               <th class="sortable num" onclick="sortFrota('valor_km_menos')">Km −${arrow('valor_km_menos')}</th>
               <th class="sortable" onclick="sortFrota('utilizador')">Utilizador${arrow('utilizador')}</th>
@@ -4891,14 +4899,14 @@ function renderFrotaListagem() {
           </thead>
           <tbody>
             ${enriched.length === 0
-              ? `<tr class="empty-row"><td colspan="15">Sem viaturas</td></tr>`
+              ? `<tr class="empty-row"><td colspan="14">Sem viaturas</td></tr>`
               : enriched.map(v => {
                 const isContrato = v.tipo === 'Leasing' || v.tipo === 'Renting';
                 const dur = v._duracao_anos != null ? v._duracao_anos + ' ano' + (v._duracao_anos===1?'':'s') : '—';
                 return `
                 <tr class="clickable" onclick="openFrotaFicha('${v.id}')">
                   <td class="cen"><strong>${escapeHtml(v.matricula)}</strong></td>
-                  <td>${escapeHtml(v.viatura)}</td>
+                  <td class="cen">${escapeHtml(v.viatura)}</td>
                   <td class="cen">${escapeHtml(v.tipo)}</td>
                   <td>${isContrato ? escapeHtml(v.empresa) : '—'}</td>
                   <td class="cen">${isContrato ? fmtDate(v.inicio_contrato) : '—'}</td>
@@ -4907,7 +4915,6 @@ function renderFrotaListagem() {
                   <td class="num">${isContrato ? fmtCurrency(v.mensalidade) : '—'}</td>
                   <td class="num">${isContrato ? fmtCurrency(v.mensalidade_gps) : '—'}</td>
                   <td class="num">${fmtCurrency(v.seguro_valor)}</td>
-                  <td>${escapeHtml(v.seguro_periodicidade) || '—'}</td>
                   <td class="num">${isContrato ? fmtCurrency(v.valor_km_mais) : '—'}</td>
                   <td class="num">${isContrato ? fmtCurrency(v.valor_km_menos) : '—'}</td>
                   <td>${escapeHtml(v.utilizador)}</td>
@@ -4921,9 +4928,194 @@ function renderFrotaListagem() {
               }).join('')}
           </tbody>
         </table>
+      </div>`}
+    </div>
+
+    ${renderFrotaDashboard()}
+  `;
+  initFrotaDashCharts();
+}
+
+function toggleFrotaList() {
+  if (!state.ui) state.ui = {};
+  state.ui.frotaListExpanded = !state.ui.frotaListExpanded;
+  renderFrota();
+}
+
+// ===== Dashboard da Frota (vista Listagem) =====
+function frotaSeguroMensal(v) {
+  const s = Number(v.seguro_valor) || 0;
+  const p = v.seguro_periodicidade;
+  if (p === 'Anual') return s / 12;
+  if (p === 'Semestral') return s / 6;
+  if (p === 'Trimestral') return s / 3;
+  return s; // Mensal, Outro ou vazio: assume mensal
+}
+
+function frotaCustoMensalViatura(v) {
+  const isC = v.tipo === 'Leasing' || v.tipo === 'Renting';
+  return {
+    mensalidade: isC ? (Number(v.mensalidade) || 0) : 0,
+    gps: isC ? (Number(v.mensalidade_gps) || 0) : 0,
+    seguro: frotaSeguroMensal(v)
+  };
+}
+
+function frotaAlertas() {
+  const hoje = new Date();
+  const alertas = [];
+  state.data.frota.forEach(v => {
+    const isC = v.tipo === 'Leasing' || v.tipo === 'Renting';
+    if (!v.utilizador) alertas.push({ id: v.id, mat: v.matricula, t: 'Sem utilizador atribuído', s: 'Atribua um utilizador a esta viatura.' });
+    if (isC && (!v.valor_km_mais || !v.valor_km_menos)) alertas.push({ id: v.id, mat: v.matricula, t: 'Dados de custo/km em falta', s: 'Preencha os valores de Km+ / Km− no contrato.' });
+    if (isC && v.fim_contrato) {
+      const meses = (new Date(v.fim_contrato) - hoje) / (1000*60*60*24*30.4375);
+      if (meses >= 0 && meses < 3) alertas.push({ id: v.id, mat: v.matricula, t: 'Contrato a terminar', s: 'Termina em ' + fmtDate(v.fim_contrato) + ' — inicie a renovação.' });
+    }
+  });
+  return alertas;
+}
+
+function renderFrotaDashboard() {
+  const frota = state.data.frota;
+  if (frota.length === 0) return '';
+  const hoje = new Date();
+
+  const custos = frota.map(v => ({ v, c: frotaCustoMensalViatura(v) }));
+  const custoTotal = custos.reduce((s, x) => s + x.c.mensalidade + x.c.gps + x.c.seguro, 0);
+  const custoMedio = custoTotal / frota.length;
+  const renovar = frota.filter(v => {
+    if (!(v.tipo === 'Leasing' || v.tipo === 'Renting') || !v.fim_contrato) return false;
+    const meses = (new Date(v.fim_contrato) - hoje) / (1000*60*60*24*30.4375);
+    return meses >= 0 && meses < 12;
+  }).length;
+  const alertas = frotaAlertas();
+
+  // Fim dos contratos agrupado por ano
+  const contratos = frota
+    .filter(v => (v.tipo === 'Leasing' || v.tipo === 'Renting') && v.fim_contrato)
+    .sort((a, b) => new Date(a.fim_contrato) - new Date(b.fim_contrato));
+  const porAno = {};
+  contratos.forEach(v => {
+    const ano = new Date(v.fim_contrato).getFullYear();
+    (porAno[ano] = porAno[ano] || []).push(v);
+  });
+  const badge = (minMeses) => {
+    if (minMeses < 3) return ['< 3 meses', 'var(--danger)', 'rgba(200,60,60,0.1)'];
+    if (minMeses < 6) return ['3 a 6 meses', '#c47b1e', 'rgba(196,123,30,0.1)'];
+    if (minMeses < 12) return ['6 a 12 meses', 'var(--gold)', 'rgba(212,160,60,0.12)'];
+    return ['> 12 meses', 'var(--success)', 'rgba(60,150,90,0.1)'];
+  };
+  const timelineHtml = Object.keys(porAno).sort().map(ano => {
+    const vs = porAno[ano];
+    const minMeses = Math.min(...vs.map(v => (new Date(v.fim_contrato) - hoje) / (1000*60*60*24*30.4375)));
+    const [lbl, cor, bg] = badge(minMeses);
+    return `
+      <div style="flex:1;min-width:150px">
+        <div style="font-weight:700;color:${cor};text-align:center;margin-bottom:10px">${ano}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${vs.map(v => `
+            <div class="clickable" onclick="openFrotaFicha('${v.id}')" style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);background:var(--bg)">
+              <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🚗 ${escapeHtml(v.viatura) || escapeHtml(v.matricula)}</span>
+              <span style="color:var(--text-muted);white-space:nowrap">${fmtDate(v.fim_contrato)}</span>
+            </div>`).join('')}
+        </div>
+        <div style="text-align:center;margin-top:10px"><span style="font-size:11px;font-weight:700;color:${cor};background:${bg};padding:3px 10px;border-radius:12px">${lbl}</span></div>
+      </div>`;
+  }).join('<div style="width:1px;background:var(--border-light)"></div>');
+
+  return `
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr))">
+      <div class="kpi-card"><div class="kpi-label">🚙 Viaturas</div><div class="kpi-value">${frota.length}</div><div class="kpi-sub">Total da frota</div></div>
+      <div class="kpi-card"><div class="kpi-label">💶 Custo Mensal</div><div class="kpi-value">${fmtCurrency(custoTotal)}</div><div class="kpi-sub">Total dos custos fixos mensais</div></div>
+      <div class="kpi-card"><div class="kpi-label">📊 Custo Médio/Viatura</div><div class="kpi-value">${fmtCurrency(custoMedio)}</div><div class="kpi-sub">Média por viatura</div></div>
+      <div class="kpi-card"><div class="kpi-label">📅 Contratos &lt; 12 meses</div><div class="kpi-value">${renovar}</div><div class="kpi-sub">A renovar em breve</div></div>
+      <div class="kpi-card"><div class="kpi-label">🔔 Alertas Ativos</div><div class="kpi-value" style="color:${alertas.length ? 'var(--danger)' : 'var(--success)'}">${alertas.length}</div><div class="kpi-sub">${alertas.length ? 'Requerem atenção' : 'Tudo em ordem'}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Custo mensal por viatura</div><div style="padding:12px 18px 18px;height:300px;position:relative"><canvas id="chart-frota-dash-custo"></canvas></div></div>
+      <div class="card"><div class="dash-card-title">Frota por fornecedor</div><div style="padding:12px 18px 18px;height:300px;position:relative"><canvas id="chart-frota-dash-forn"></canvas></div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Fim dos contratos</div>
+        <div style="display:flex;gap:14px;padding:16px 18px 18px;overflow-x:auto">${timelineHtml || '<div class="text-small text-muted">Sem contratos ativos</div>'}</div>
+      </div>
+      <div class="card"><div class="dash-card-title">Atenção necessária</div>
+        <div style="padding:12px 18px 18px;display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto">
+          ${alertas.length === 0 ? '<div class="text-small text-muted">Sem alertas — tudo em ordem ✓</div>' : alertas.map(a => `
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 12px;background:var(--bg)">
+              <span style="font-size:18px">⚠️</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:13px">${escapeHtml(a.mat)}</div>
+                <div style="font-size:12px;font-weight:600">${a.t}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${a.s}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openFrotaFicha('${a.id}')">Ver</button>
+            </div>`).join('')}
+        </div>
       </div>
     </div>
+    <div class="text-small text-muted" style="margin-top:10px">Os valores apresentados incluem mensalidade, seguro (mensalizado pela periodicidade) e GPS. Combustível, portagens e restantes despesas variáveis estão no Financeiro.</div>
   `;
+}
+
+function initFrotaDashCharts() {
+  const elCusto = $('#chart-frota-dash-custo');
+  if (!elCusto) return;
+
+  const frota = [...state.data.frota]
+    .map(v => ({ v, c: frotaCustoMensalViatura(v) }))
+    .map(x => ({ ...x, total: x.c.mensalidade + x.c.gps + x.c.seguro }))
+    .sort((a, b) => b.total - a.total);
+
+  if (state.charts.frotaDashCusto) state.charts.frotaDashCusto.destroy();
+  state.charts.frotaDashCusto = new Chart(elCusto, {
+    type: 'bar',
+    data: {
+      labels: frota.map(x => x.v.viatura || x.v.matricula),
+      datasets: [
+        { label: 'Mensalidade', data: frota.map(x => x.c.mensalidade), backgroundColor: '#1e3a5f' },
+        { label: 'Seguro', data: frota.map(x => x.c.seguro), backgroundColor: '#d4a03c' },
+        { label: 'GPS', data: frota.map(x => x.c.gps), backgroundColor: '#b8bcc4' }
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { callback: v => fmtNumber(v) + ' €' } },
+        y: { stacked: true }
+      },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtCurrency(ctx.raw) } }
+      }
+    }
+  });
+
+  const elForn = $('#chart-frota-dash-forn');
+  if (elForn) {
+    const porForn = {};
+    state.data.frota.forEach(v => {
+      const k = (v.tipo === 'Leasing' || v.tipo === 'Renting') ? (v.empresa || 'Sem fornecedor') : 'Própria';
+      porForn[k] = (porForn[k] || 0) + 1;
+    });
+    const labels = Object.keys(porForn).sort((a, b) => porForn[b] - porForn[a]);
+    const total = state.data.frota.length;
+    if (state.charts.frotaDashForn) state.charts.frotaDashForn.destroy();
+    state.charts.frotaDashForn = new Chart(elForn, {
+      type: 'doughnut',
+      data: {
+        labels: labels.map(l => `${l} — ${porForn[l]} (${(porForn[l]/total*100).toFixed(1).replace('.', ',')}%)`),
+        datasets: [{ data: labels.map(l => porForn[l]), backgroundColor: ['#1e3a5f', '#d4a03c', '#7d9cc0', '#b8bcc4', '#8a6d3b', '#4a6741'] }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '55%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } }
+      }
+    });
+  }
 }
 
 function sortFrota(k) {
@@ -4961,6 +5153,9 @@ function renderFrotaControlo() {
   // ordenar por data desc
   controlos.sort((a, b) => new Date(b.data_controlo) - new Date(a.data_controlo));
 
+  if (!state.ui) state.ui = {};
+  const ctrlExpanded = !!state.ui.frotaCtrlExpanded || !!f.search; // pesquisa ativa expande automaticamente
+
   $('#section-frota').innerHTML = `
     <div class="page-header">
       <div>
@@ -4968,21 +5163,19 @@ function renderFrotaControlo() {
         <div class="page-subtitle">${controlos.length} controlo(s)</div>
       </div>
       <div class="page-actions">
+        <input type="text" class="form-control search" id="ctrl-search" style="width:250px" placeholder="Pesquisar controlo..."
+               value="${escapeHtml(f.search)}" oninput="state.filters.frotaControlos.search = this.value; renderFrotaControloPreserveFocus();">
         ${frotaTabs('controlo')}
         ${canEdit() ? `<button class="btn btn-gold" onclick="openControloModal(null, true)">+ Novo Controlo</button>` : ''}
       </div>
     </div>
 
-    <div class="card">
-      <div class="filter-bar">
-        <input type="text" class="form-control search" id="ctrl-search" placeholder="Pesquisar matrícula, viatura, utilizador..."
-               value="${escapeHtml(f.search)}" oninput="state.filters.frotaControlos.search = this.value; renderFrotaControloPreserveFocus();">
-        <select class="form-control" onchange="state.filters.frotaControlos.viatura = this.value; renderFrota();">
-          <option value="">Todas as viaturas</option>
-          ${state.data.frota.map(v => `<option value="${v.id}" ${f.viatura===v.id?'selected':''}>${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</option>`).join('')}
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="state.filters.frotaControlos={search:'',viatura:''};renderFrota();">Limpar</button>
+    <div class="card" style="margin-bottom:24px">
+      <div class="collapse-head" onclick="toggleFrotaCtrl()">
+        <div class="collapse-title">Registos de controlo <span style="color:var(--text-muted);font-weight:600">(${controlos.length})</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();toggleFrotaCtrl()">${ctrlExpanded ? '▾ Colapsar' : '▸ Expandir'}</button>
       </div>
+      ${!ctrlExpanded ? '' : `
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -5007,7 +5200,7 @@ function renderFrotaControlo() {
                 <tr class="clickable" onclick="openFrotaDetail('${c.viatura_id}')">
                   <td class="cen">${fmtDate(c.data_controlo)}</td>
                   <td class="cen"><strong>${escapeHtml(c.matricula)}</strong></td>
-                  <td>${escapeHtml(c.viatura)}</td>
+                  <td class="cen">${escapeHtml(c.viatura)}</td>
                   <td>${escapeHtml(c.utilizador)}</td>
                   <td class="num">${fmtNumber(c.kms_atuais)}</td>
                   <td class="num">${fmtNumber(c.kms_previstos)}</td>
@@ -5020,9 +5213,178 @@ function renderFrotaControlo() {
               `).join('')}
           </tbody>
         </table>
+      </div>`}
+    </div>
+
+    ${renderFrotaControloDashboard()}
+  `;
+  initFrotaControloCharts();
+}
+
+function toggleFrotaCtrl() {
+  if (!state.ui) state.ui = {};
+  state.ui.frotaCtrlExpanded = !state.ui.frotaCtrlExpanded;
+  renderFrota();
+}
+
+// ===== Dashboard do Controlo de Kms =====
+// Último controlo registado de cada viatura (base de todo o dashboard)
+function frotaCtrlUltimos() {
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+  const ult = {};
+  state.data.frotaControlos.forEach(c => {
+    const cur = ult[c.viatura_id];
+    if (!cur || new Date(c.data_controlo) > new Date(cur.data_controlo)) ult[c.viatura_id] = c;
+  });
+  return Object.values(ult).map(c => ({ ...c, _v: vmap[c.viatura_id] })).filter(x => x._v);
+}
+
+function ctrlBadge(c) {
+  const custo = Number(c.custo_extrapolado) || 0;
+  const desvio = Number(c.desvio) || 0;
+  if (custo === 0 && desvio > 0) return ['Rever contrato', '#1e6091', 'rgba(30,96,145,0.1)'];
+  if (custo <= 100) return ['Dentro do previsto', 'var(--success)', 'rgba(60,150,90,0.1)'];
+  if (custo >= 3000) return ['Crítico', 'var(--danger)', 'rgba(200,60,60,0.1)'];
+  if (custo >= 1000) return ['Elevado', '#c4501e', 'rgba(196,80,30,0.1)'];
+  return ['Moderado', '#c47b1e', 'rgba(196,123,30,0.1)'];
+}
+
+function frotaCtrlAlertas() {
+  const alertas = [];
+  frotaCtrlUltimos().forEach(c => {
+    const custo = Number(c.custo_extrapolado) || 0;
+    const desvio = Number(c.desvio) || 0;
+    const nome = `${escapeHtml(c._v.matricula)} · ${escapeHtml(c._v.viatura)}`;
+    if (custo >= 3000) alertas.push({ id: c.viatura_id, ico: '🔴', t: `${nome} — Rever limite contratual`, s: 'Desvio muito acima do previsto. Risco elevado de custos adicionais.' });
+    else if (custo >= 1000) alertas.push({ id: c.viatura_id, ico: '🟠', t: `${nome} — Projeção de ${fmtCurrency(custo)}`, s: 'Custo estimado no fim do contrato acima do tolerado.' });
+    else if (desvio > 0 && custo === 0) alertas.push({ id: c.viatura_id, ico: 'ℹ️', t: `${nome} — Desvio sem custo calculado`, s: 'Desvio positivo, mas sem custo associado. Rever contrato.' });
+  });
+  return alertas;
+}
+
+function renderFrotaControloDashboard() {
+  const ultimos = frotaCtrlUltimos();
+  if (ultimos.length === 0) return '';
+
+  const acima = ultimos.filter(c => (Number(c.desvio) || 0) > 0).length;
+  const desvioTotal = ultimos.reduce((s, c) => s + (Number(c.desvio) || 0), 0);
+  const custoAtual = ultimos.reduce((s, c) => s + (Number(c.custo_momento) || 0), 0);
+  const custoFim = ultimos.reduce((s, c) => s + (Number(c.custo_extrapolado) || 0), 0);
+  const alertas = frotaCtrlAlertas();
+
+  const impacto = [...ultimos].sort((a, b) => (Number(b.custo_extrapolado) || 0) - (Number(a.custo_extrapolado) || 0));
+
+  return `
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr))">
+      <div class="kpi-card"><div class="kpi-label">🚙 Viaturas Controladas</div><div class="kpi-value">${ultimos.length}</div><div class="kpi-sub">Com registos de controlo</div></div>
+      <div class="kpi-card"><div class="kpi-label">📈 Acima do Previsto</div><div class="kpi-value" style="color:${acima ? 'var(--danger)' : 'var(--success)'}">${acima}</div><div class="kpi-sub">De ${ultimos.length} viaturas</div></div>
+      <div class="kpi-card"><div class="kpi-label">📊 Desvio Acumulado</div><div class="kpi-value" style="color:${desvioTotal > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtNumber(desvioTotal, true)} km</div><div class="kpi-sub">Soma dos últimos controlos</div></div>
+      <div class="kpi-card"><div class="kpi-label">💶 Custo Atual do Desvio</div><div class="kpi-value" style="color:${custoAtual > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(custoAtual)}</div><div class="kpi-sub">À data dos controlos</div></div>
+      <div class="kpi-card"><div class="kpi-label">💶 Custo Estimado no Fim</div><div class="kpi-value" style="color:${custoFim > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(custoFim)}</div><div class="kpi-sub">Projeção ao fim do contrato</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Desvio face aos kms previstos</div><div style="padding:12px 18px 18px;height:300px;position:relative"><canvas id="chart-ctrl-desvio"></canvas></div></div>
+      <div class="card"><div class="dash-card-title">Maior impacto estimado</div>
+        <div style="padding:12px 18px 18px;display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto">
+          ${impacto.map((c, i) => {
+            const custo = Number(c.custo_extrapolado) || 0;
+            const [lbl, cor, bg] = ctrlBadge(c);
+            return `
+            <div style="display:flex;align-items:center;gap:10px;font-size:13px">
+              <span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i < 3 && custo > 100 ? 'white' : 'var(--text-muted)'};background:${i < 3 && custo > 100 ? 'var(--danger)' : 'var(--bg-muted)'}">${i+1}</span>
+              <span style="flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c._v.viatura) || escapeHtml(c._v.matricula)}</span>
+              <span class="num" style="font-weight:700;color:${custo > 0 ? 'var(--danger)' : 'var(--success)'}">${fmtCurrency(custo)}</span>
+              <span style="font-size:10px;font-weight:700;color:${cor};background:${bg};padding:3px 8px;border-radius:10px;white-space:nowrap">${lbl}</span>
+              <button class="btn btn-secondary btn-sm" onclick="openFrotaDetail('${c.viatura_id}')">Ver detalhe</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Evolução do desvio</div><div style="padding:12px 18px 18px;height:300px;position:relative"><canvas id="chart-ctrl-evolucao"></canvas></div></div>
+      <div class="card"><div class="dash-card-title">Alertas e ações</div>
+        <div style="padding:12px 18px 18px;display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto">
+          ${alertas.length === 0 ? '<div class="text-small text-muted">Sem alertas — desvios dentro do previsto ✓</div>' : alertas.map(a => `
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 12px;background:var(--bg)">
+              <span style="font-size:16px">${a.ico}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:12px">${a.t}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${a.s}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openFrotaDetail('${a.id}')">Analisar</button>
+            </div>`).join('')}
+        </div>
       </div>
     </div>
   `;
+}
+
+function initFrotaControloCharts() {
+  const elDesvio = $('#chart-ctrl-desvio');
+  if (!elDesvio) return;
+
+  // Barras horizontais: desvio do último controlo, ordenado do maior para o menor
+  const ultimos = frotaCtrlUltimos().sort((a, b) => (Number(b.desvio) || 0) - (Number(a.desvio) || 0));
+  if (state.charts.ctrlDesvio) state.charts.ctrlDesvio.destroy();
+  state.charts.ctrlDesvio = new Chart(elDesvio, {
+    type: 'bar',
+    data: {
+      labels: ultimos.map(c => c._v.viatura || c._v.matricula),
+      datasets: [{
+        data: ultimos.map(c => Number(c.desvio) || 0),
+        backgroundColor: ultimos.map(c => (Number(c.desvio) || 0) > 0 ? '#c0392b' : '#27824f'),
+        borderRadius: 3
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: { x: { ticks: { callback: v => fmtNumber(v) } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmtNumber(ctx.raw, true) + ' km' } }
+      }
+    }
+  });
+
+  // Evolução: linha por viatura, um ponto por mês com controlo
+  const elEvol = $('#chart-ctrl-evolucao');
+  if (elEvol) {
+    const vmap = {};
+    state.data.frota.forEach(v => vmap[v.id] = v);
+    const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const chaves = [...new Set(state.data.frotaControlos.map(c => String(c.data_controlo).slice(0, 7)))].sort();
+    const labels = chaves.map(k => MESES[parseInt(k.slice(5, 7), 10) - 1] + '/' + k.slice(0, 4));
+    const porViatura = {};
+    [...state.data.frotaControlos].sort((a, b) => new Date(a.data_controlo) - new Date(b.data_controlo)).forEach(c => {
+      if (!vmap[c.viatura_id]) return;
+      (porViatura[c.viatura_id] = porViatura[c.viatura_id] || {})[String(c.data_controlo).slice(0, 7)] = Number(c.desvio) || 0;
+    });
+    const cores = ['#c0392b', '#e67e22', '#8e44ad', '#2980b9', '#27824f', '#1e3a5f', '#d4a03c', '#7f8c8d'];
+    const datasets = Object.keys(porViatura).map((vid, i) => ({
+      label: vmap[vid].viatura || vmap[vid].matricula,
+      data: chaves.map(k => porViatura[vid][k] ?? null),
+      borderColor: cores[i % cores.length],
+      backgroundColor: cores[i % cores.length],
+      spanGaps: true, tension: 0.15, pointRadius: 4, borderWidth: 2
+    }));
+    if (state.charts.ctrlEvolucao) state.charts.ctrlEvolucao.destroy();
+    state.charts.ctrlEvolucao = new Chart(elEvol, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { ticks: { callback: v => fmtNumber(v) } } },
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtNumber(ctx.raw, true) + ' km' } }
+        }
+      }
+    });
+  }
 }
 
 function renderFrotaControloPreserveFocus() {
@@ -5579,41 +5941,50 @@ async function deleteControlo(id, viaturaId) {
 const FROTA_TIPOS_DESPESA = ['Prestação', 'Portagens', 'Gasóleo', 'Eletricidade', 'Multas', 'Via Verde', 'Seguro', 'Manutenção', 'Outro'];
 
 function renderFrotaFinanceiro() {
+  if (!state.filters.frotaDespesas.search) state.filters.frotaDespesas.search = '';
   const f = state.filters.frotaDespesas;
-  let desp = state.data.frotaDespesas;
-  if (f.viatura) desp = desp.filter(d => d.viatura_id === f.viatura);
-  if (f.tipo) desp = desp.filter(d => d.tipo === f.tipo);
-  desp = [...desp].sort((a, b) => new Date(b.data) - new Date(a.data));
 
   const vmap = {};
   state.data.frota.forEach(v => vmap[v.id] = v);
+
+  let desp = state.data.frotaDespesas;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    desp = desp.filter(d => {
+      const v = vmap[d.viatura_id];
+      return (v?.matricula || '').toLowerCase().includes(q) ||
+             (v?.viatura || '').toLowerCase().includes(q) ||
+             (d.tipo || '').toLowerCase().includes(q) ||
+             (d.notas || '').toLowerCase().includes(q);
+    });
+  }
+  desp = [...desp].sort((a, b) => new Date(b.data) - new Date(a.data));
   const total = desp.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
+  if (!state.ui) state.ui = {};
+  const finExpanded = !!state.ui.frotaFinExpanded || !!f.search; // pesquisa ativa expande automaticamente
 
   $('#section-frota').innerHTML = `
     <div class="page-header">
       <div>
-        <div class="page-title">Frota — Financeiro</div>
+        <div class="page-title">Frota — Custos</div>
         <div class="page-subtitle">${desp.length} despesa(s) · ${fmtCurrency(total)}</div>
       </div>
       <div class="page-actions">
+        <input type="text" class="form-control search" id="fin-search" style="width:250px" placeholder="Pesquisar despesa..."
+               value="${escapeHtml(f.search)}" oninput="state.filters.frotaDespesas.search = this.value; renderFrotaFinanceiroPreserveFocus();">
         ${frotaTabs('financeiro')}
         <button class="btn btn-secondary" onclick="exportFrotaDespesas()">⬇ Export XLSX</button>
         ${canEdit() ? `<button class="btn btn-gold" onclick="openDespesaModal()">+ Nova Despesa</button>` : ''}
       </div>
     </div>
 
-    <div class="card">
-      <div class="filter-bar">
-        <select class="form-control" onchange="state.filters.frotaDespesas.viatura = this.value; renderFrota();">
-          <option value="">Todas as viaturas</option>
-          ${state.data.frota.map(v => `<option value="${v.id}" ${f.viatura===v.id?'selected':''}>${escapeHtml(v.matricula)} — ${escapeHtml(v.viatura)}</option>`).join('')}
-        </select>
-        <select class="form-control" onchange="state.filters.frotaDespesas.tipo = this.value; renderFrota();">
-          <option value="">Todos os tipos</option>
-          ${FROTA_TIPOS_DESPESA.map(t => `<option ${f.tipo===t?'selected':''}>${t}</option>`).join('')}
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="state.filters.frotaDespesas={viatura:'',tipo:''};renderFrota();">Limpar</button>
+    <div class="card" style="margin-bottom:24px">
+      <div class="collapse-head" onclick="toggleFrotaFin()">
+        <div class="collapse-title">Registos de despesas <span style="color:var(--text-muted);font-weight:600">(${desp.length} · ${fmtCurrency(total)})</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();toggleFrotaFin()">${finExpanded ? '▾ Colapsar' : '▸ Expandir'}</button>
       </div>
+      ${!finExpanded ? '' : `
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -5633,8 +6004,8 @@ function renderFrotaFinanceiro() {
                 const v = vmap[d.viatura_id];
                 return `
                 <tr>
-                  <td>${fmtDate(d.data)}</td>
-                  <td>${v ? escapeHtml(v.matricula) : '—'}</td>
+                  <td class="cen">${fmtDate(d.data)}</td>
+                  <td class="cen">${v ? escapeHtml(v.matricula) : '—'}</td>
                   <td>${escapeHtml(d.tipo)}</td>
                   <td class="num">${fmtCurrency(d.valor)}</td>
                   <td>${escapeHtml(d.notas)}</td>
@@ -5646,9 +6017,226 @@ function renderFrotaFinanceiro() {
               }).join('')}
           </tbody>
         </table>
+      </div>`}
+    </div>
+
+    ${renderFrotaCustosDashboard()}
+  `;
+  initFrotaCustosCharts();
+}
+
+function toggleFrotaFin() {
+  if (!state.ui) state.ui = {};
+  state.ui.frotaFinExpanded = !state.ui.frotaFinExpanded;
+  renderFrota();
+}
+
+function renderFrotaFinanceiroPreserveFocus() {
+  const el = document.activeElement;
+  const isSearch = el && el.id === 'fin-search';
+  const pos = isSearch ? el.selectionStart : null;
+  renderFrota();
+  if (isSearch) {
+    const newEl = document.getElementById('fin-search');
+    if (newEl) { newEl.focus(); if (pos !== null) newEl.setSelectionRange(pos, pos); }
+  }
+}
+
+// ===== Dashboard de Custos da Frota =====
+const CUSTOS_GRUPOS = {
+  'Prestação': 'Prestação', 'Seguro': 'Seguro', 'Portagens': 'Portagens',
+  'Gasóleo': 'Energia', 'Eletricidade': 'Energia', 'Manutenção': 'Manutenção'
+};
+const CUSTOS_CORES = { 'Prestação': '#1e3a5f', 'Seguro': '#2980b9', 'Portagens': '#d4a03c', 'Energia': '#27824f', 'Manutenção': '#c0392b', 'Outros': '#b8bcc4' };
+// Cores por tipo individual (donut e legenda do mês)
+const CUSTOS_CORES_TIPO = { 'Prestação': '#1e3a5f', 'Seguro': '#2980b9', 'Portagens': '#d4a03c', 'Gasóleo': '#27824f', 'Eletricidade': '#16a085', 'Manutenção': '#c0392b', 'Multas': '#8e44ad', 'Via Verde': '#e67e22', 'Outro': '#b8bcc4' };
+function corTipoDespesa(t) { return CUSTOS_CORES_TIPO[t] || '#b8bcc4'; }
+const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+function custosMesLabel(k) { return MESES_PT[parseInt(k.slice(5, 7), 10) - 1] + ' ' + k.slice(0, 4); }
+
+// Mês de referência = mês mais recente com despesas registadas
+function custosMesRef() {
+  const chaves = state.data.frotaDespesas.map(d => String(d.data).slice(0, 7));
+  return chaves.length ? chaves.sort().pop() : null;
+}
+
+function frotaCustosDestaques() {
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+  const dest = [];
+  const desp = state.data.frotaDespesas;
+
+  // 1) Valor individual elevado (≥ 1 000 €, excluindo prestações que são fixas)
+  desp.filter(d => d.tipo !== 'Prestação' && (Number(d.valor) || 0) >= 1000).forEach(d => {
+    const v = vmap[d.viatura_id];
+    dest.push({ id: d.viatura_id, ico: '⚠️', t: `${escapeHtml(v?.matricula || '—')} · ${escapeHtml(d.tipo)} — ${fmtCurrency(d.valor)}`, s: (d.notas ? escapeHtml(d.notas) + ' · ' : '') + custosMesLabel(String(d.data).slice(0,7)).toLowerCase(), badge: 'Valor elevado' });
+  });
+
+  // 2) Manutenções registadas (custos não recorrentes)
+  desp.filter(d => d.tipo === 'Manutenção' && (Number(d.valor) || 0) > 0 && (Number(d.valor) || 0) < 1000).forEach(d => {
+    const v = vmap[d.viatura_id];
+    dest.push({ id: d.viatura_id, ico: '🔧', t: `${escapeHtml(v?.matricula || '—')} · Manutenção — ${fmtCurrency(d.valor)}`, s: (d.notas ? escapeHtml(d.notas) + ' · ' : '') + custosMesLabel(String(d.data).slice(0,7)).toLowerCase() });
+  });
+
+  // 3) Viaturas com gasóleo E eletricidade (validar dupla tipologia)
+  const porV = {};
+  desp.forEach(d => {
+    if (d.tipo === 'Gasóleo' || d.tipo === 'Eletricidade') (porV[d.viatura_id] = porV[d.viatura_id] || new Set()).add(d.tipo);
+  });
+  Object.keys(porV).filter(vid => porV[vid].size === 2).forEach(vid => {
+    const v = vmap[vid];
+    dest.push({ id: vid, ico: '🔀', t: `${escapeHtml(v?.matricula || '—')} — Gasóleo e eletricidade`, s: 'Validar dupla tipologia de energia.' });
+  });
+
+  return dest;
+}
+
+function renderFrotaCustosDashboard() {
+  const desp = state.data.frotaDespesas;
+  if (desp.length === 0) return '';
+  const vmap = {};
+  state.data.frota.forEach(v => vmap[v.id] = v);
+
+  const mesRef = custosMesRef();
+  const mesLbl = custosMesLabel(mesRef).toLowerCase();
+  const despMes = desp.filter(d => String(d.data).slice(0, 7) === mesRef);
+
+  const acumulada = desp.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+  const totalMes = despMes.reduce((s, d) => s + (Number(d.valor) || 0), 0);
+  const fixosMes = despMes.filter(d => d.tipo === 'Prestação' || d.tipo === 'Seguro').reduce((s, d) => s + (Number(d.valor) || 0), 0);
+  const utilizacaoMes = despMes.filter(d => ['Gasóleo', 'Eletricidade', 'Portagens'].includes(d.tipo)).reduce((s, d) => s + (Number(d.valor) || 0), 0);
+
+  // Donut: despesas do mês por tipo
+  const porTipo = {};
+  despMes.forEach(d => porTipo[d.tipo] = (porTipo[d.tipo] || 0) + (Number(d.valor) || 0));
+  const tiposOrd = Object.keys(porTipo).filter(t => porTipo[t] > 0).sort((a, b) => porTipo[b] - porTipo[a]);
+  const legendaTipos = tiposOrd.map(t => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+      <span style="width:10px;height:10px;border-radius:50%;background:${corTipoDespesa(t)}"></span>
+      <span style="flex:1">${escapeHtml(t)}</span>
+      <span class="num" style="font-weight:600">${fmtCurrency(porTipo[t])}</span>
+      <span class="num" style="color:var(--text-muted);width:48px">${(porTipo[t] / totalMes * 100).toFixed(1).replace('.', ',')}%</span>
+    </div>`).join('');
+
+  // Custo por viatura no mês
+  const porViatura = {};
+  despMes.forEach(d => porViatura[d.viatura_id] = (porViatura[d.viatura_id] || 0) + (Number(d.valor) || 0));
+  const viaturasOrd = Object.keys(porViatura).filter(vid => vmap[vid]).sort((a, b) => porViatura[b] - porViatura[a]);
+  const maxV = viaturasOrd.length ? porViatura[viaturasOrd[0]] : 1;
+  const barrasViatura = viaturasOrd.map((vid, i) => `
+    <div class="clickable" onclick="openFrotaDetail('${vid}')" style="display:flex;align-items:center;gap:10px;font-size:12px">
+      <span style="width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${escapeHtml(vmap[vid].matricula)} · ${escapeHtml(vmap[vid].viatura)}</span>
+      <div style="flex:1;background:var(--bg-muted);border-radius:4px;height:16px;overflow:hidden">
+        <div style="width:${Math.max(3, porViatura[vid] / maxV * 100)}%;height:100%;background:${i === 0 ? 'var(--gold)' : '#1e3a5f'};border-radius:4px"></div>
+      </div>
+      <span class="num" style="width:90px;font-weight:${i === 0 ? '700' : '600'}">${fmtCurrency(porViatura[vid])}</span>
+    </div>`).join('');
+
+  const destaques = frotaCustosDestaques();
+
+  return `
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr))">
+      <div class="kpi-card"><div class="kpi-label">💼 Despesa Acumulada</div><div class="kpi-value">${fmtCurrency(acumulada)}</div><div class="kpi-sub">Total registado</div></div>
+      <div class="kpi-card"><div class="kpi-label">📅 Despesa em ${mesLbl}</div><div class="kpi-value">${fmtCurrency(totalMes)}</div><div class="kpi-sub">Mês mais recente</div></div>
+      <div class="kpi-card"><div class="kpi-label">🛡 Custos fixos em ${mesLbl}</div><div class="kpi-value">${fmtCurrency(fixosMes)}</div><div class="kpi-sub">Prestação + seguro</div></div>
+      <div class="kpi-card"><div class="kpi-label">⚡ Custos de utilização</div><div class="kpi-value">${fmtCurrency(utilizacaoMes)}</div><div class="kpi-sub">Energia + portagens</div></div>
+      <div class="kpi-card"><div class="kpi-label">🧾 Despesas Registadas</div><div class="kpi-value">${desp.length}</div><div class="kpi-sub">Movimentos no total</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Evolução mensal da despesa</div><div style="padding:12px 18px 18px;height:300px;position:relative"><canvas id="chart-custos-evolucao"></canvas></div></div>
+      <div class="card"><div class="dash-card-title">Despesas de ${mesLbl} por tipo</div>
+        <div style="display:flex;gap:16px;align-items:center;padding:12px 18px 18px">
+          <div style="width:45%;height:260px;position:relative"><canvas id="chart-custos-tipo"></canvas></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px">${legendaTipos}</div>
+        </div>
       </div>
     </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-row">
+      <div class="card"><div class="dash-card-title">Custo por viatura — ${mesLbl}</div>
+        <div style="padding:14px 18px 18px;display:flex;flex-direction:column;gap:9px">${barrasViatura || '<div class="text-small text-muted">Sem despesas no mês</div>'}</div>
+      </div>
+      <div class="card"><div class="dash-card-title">Destaques e anomalias</div>
+        <div style="padding:12px 18px 18px;display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto">
+          ${destaques.length === 0 ? '<div class="text-small text-muted">Sem destaques — despesas dentro do padrão ✓</div>' : destaques.map(a => `
+            <div style="display:flex;align-items:center;gap:12px;border:1px solid var(--border-light);border-radius:var(--radius);padding:10px 12px;background:var(--bg)">
+              <span style="font-size:16px">${a.ico}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:12px">${a.t} ${a.badge ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(200,60,60,0.1);padding:2px 8px;border-radius:10px;margin-left:4px">${a.badge}</span>` : ''}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${a.s}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openFrotaDetail('${a.id}')">Analisar</button>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="text-small text-muted" style="margin-top:10px">Valores de ${mesLbl} calculados a partir das despesas registadas no Custos.</div>
   `;
+}
+
+function initFrotaCustosCharts() {
+  const elEvol = $('#chart-custos-evolucao');
+  if (!elEvol) return;
+
+  // Barras empilhadas por mês e grupo
+  const grupos = ['Prestação', 'Seguro', 'Portagens', 'Energia', 'Manutenção', 'Outros'];
+  const chaves = [...new Set(state.data.frotaDespesas.map(d => String(d.data).slice(0, 7)))].sort();
+  const porMesGrupo = {};
+  state.data.frotaDespesas.forEach(d => {
+    const k = String(d.data).slice(0, 7);
+    const g = CUSTOS_GRUPOS[d.tipo] || 'Outros';
+    (porMesGrupo[k] = porMesGrupo[k] || {})[g] = (porMesGrupo[k]?.[g] || 0) + (Number(d.valor) || 0);
+  });
+  if (state.charts.custosEvolucao) state.charts.custosEvolucao.destroy();
+  state.charts.custosEvolucao = new Chart(elEvol, {
+    type: 'bar',
+    data: {
+      labels: chaves.map(custosMesLabel),
+      datasets: grupos.map(g => ({
+        label: g,
+        data: chaves.map(k => porMesGrupo[k]?.[g] || 0),
+        backgroundColor: CUSTOS_CORES[g]
+      })).filter(ds => ds.data.some(v => v > 0))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, ticks: { callback: v => fmtNumber(v) + ' €' } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtCurrency(ctx.raw) } }
+      }
+    }
+  });
+
+  // Donut do mês de referência por tipo (legenda em HTML ao lado)
+  const elTipo = $('#chart-custos-tipo');
+  if (elTipo) {
+    const mesRef = custosMesRef();
+    const despMes = state.data.frotaDespesas.filter(d => String(d.data).slice(0, 7) === mesRef);
+    const porTipo = {};
+    despMes.forEach(d => porTipo[d.tipo] = (porTipo[d.tipo] || 0) + (Number(d.valor) || 0));
+    const tipos = Object.keys(porTipo).filter(t => porTipo[t] > 0).sort((a, b) => porTipo[b] - porTipo[a]);
+    if (state.charts.custosTipo) state.charts.custosTipo.destroy();
+    state.charts.custosTipo = new Chart(elTipo, {
+      type: 'doughnut',
+      data: {
+        labels: tipos,
+        datasets: [{ data: tipos.map(t => porTipo[t]), backgroundColor: tipos.map(t => corTipoDespesa(t)) }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '60%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.label + ': ' + fmtCurrency(ctx.raw) } }
+        }
+      }
+    });
+  }
 }
 
 function openDespesaModal(id) {
