@@ -888,7 +888,7 @@
         <span class="dot">●</span>
         <div class="brand-meta">
           <span class="subtitle">Sist. Integrado Gestão Aceitar</span>
-          <span class="app-version" title="Versão da aplicação">v2026.07.21-07h32</span>
+          <span class="app-version" title="Versão da aplicação">v2026.09.02-11h00</span>
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
@@ -1097,6 +1097,7 @@ const state = {
   userRole: null,
   currentSection: 'dashboard',
   inspectView: 'listagem',
+  inspectEquipamentos: [],
   frotaView: 'listagem',
   concursoView: 'listagem',
   data: {
@@ -1429,8 +1430,8 @@ async function logout() {
 
 // ---------- DATA LOADING ----------
 async function loadAll() {
-  const tables = ['concursos', 'inspect_pedidos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frota_controlos', 'frota_despesas'];
-  const keys = ['concursos', 'inspect', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frotaControlos', 'frotaDespesas'];
+  const tables = ['concursos', 'inspect_pedidos', 'inspect_equipamentos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frota_controlos', 'frota_despesas'];
+  const keys = ['concursos', 'inspect', 'inspectEquipamentos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frotaControlos', 'frotaDespesas'];
 
   const results = await Promise.all(tables.map(t =>
     sb.from(t).select('*').order('created_at', { ascending: false })
@@ -1445,6 +1446,7 @@ async function reloadTable(key) {
   const tableMap = {
     concursos: 'concursos',
     inspect: 'inspect_pedidos',
+    inspectEquipamentos: 'inspect_equipamentos',
     afetacoes: 'afetacoes',
     frota: 'frota',
     equipamentos: 'equipamentos',
@@ -2674,6 +2676,10 @@ function renderConcursoAnalise() {
 // ACEITAR INSPECT
 // ============================================================
 function renderInspect() {
+  if (state.inspectView === 'equipamentos') {
+    renderInspectEquipamentos();
+    return;
+  }
   if (state.inspectView === 'analise') {
     renderInspectAnalise();
     return;
@@ -2720,6 +2726,7 @@ function renderInspect() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn active" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
           ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
@@ -2813,6 +2820,278 @@ function renderInspectPreserveFocus() {
 // ============================================================
 // ACEITAR INSPECT — VISTA FINANCEIRO
 // ============================================================
+// ─────────────────────────────────────────────
+// INSPECT — EQUIPAMENTOS
+// ─────────────────────────────────────────────
+function renderInspectEquipamentos() {
+  const data = [...state.inspectEquipamentos].sort((a, b) =>
+    (a.data_compra || '').localeCompare(b.data_compra || '')
+  );
+
+  const search = (state.filters.inspectEquip || '').toLowerCase();
+  const rows = search
+    ? data.filter(r =>
+        [r.designacao, r.marca, r.referencia, r.fornecedor, r.data_compra, String(r.valor || '')]
+          .join(' ').toLowerCase().includes(search)
+      )
+    : data;
+
+  const totalValor = data.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+  const fornecedores = new Set(data.map(r => r.fornecedor).filter(Boolean)).size;
+  const ultimo = data.length
+    ? new Date(data[data.length - 1].data_compra).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' })
+    : '—';
+
+  $('#section-inspect').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Aceitar Inspect</div>
+        <div class="page-subtitle">${data.length} equipamento(s) · ${fmtCurrency(totalValor)}</div>
+      </div>
+      <div class="page-actions">
+        <div class="tabs">
+          <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn active" onclick="switchInspectView('equipamentos')">Equipamentos</button>
+          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
+          <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
+          <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
+        </div>
+        ${canEdit() ? `<button class="btn btn-gold" onclick="openEquipModal()">+ Novo Equipamento</button>` : ''}
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-card" style="border-top:2px solid var(--primary)">
+        <div class="kpi-label">Equipamentos</div>
+        <div class="kpi-value" style="color:var(--primary)">${data.length}</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid var(--purple,#818CF8)">
+        <div class="kpi-label">Valor total</div>
+        <div class="kpi-value" style="color:var(--purple,#818CF8)">${fmtCurrency(totalValor)}</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid var(--success)">
+        <div class="kpi-label">Fornecedores</div>
+        <div class="kpi-value" style="color:var(--success)">${fornecedores}</div>
+      </div>
+      <div class="kpi-card" style="border-top:2px solid var(--warning,#FBBF24)">
+        <div class="kpi-label">Último registo</div>
+        <div class="kpi-value" style="color:var(--warning,#FBBF24)">${ultimo}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="text" class="form-control search" id="equip-search"
+               placeholder="Pesquisar em todos os campos..."
+               value="${escapeHtml(state.filters.inspectEquip || '')}"
+               oninput="state.filters.inspectEquip = this.value; renderInspectEquipamentosPreserveFocus();">
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table" style="table-layout:fixed;width:100%">
+          <colgroup>
+            <col style="width:14%">
+            <col style="width:21%">
+            <col style="width:12%">
+            <col style="width:19%">
+            <col style="width:14%">
+            <col style="width:14%">
+            <col style="width:3%">
+            <col style="width:3%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th style="text-align:center">Data</th>
+              <th style="text-align:left">Designação</th>
+              <th style="text-align:center">Marca</th>
+              <th style="text-align:center">Referência</th>
+              <th style="text-align:right;padding-right:60px">Valor</th>
+              <th style="text-align:left">Fornecedor</th>
+              <th style="text-align:center">✎</th>
+              <th style="text-align:center">🔍</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length === 0
+              ? `<tr class="empty-row"><td colspan="8">Sem equipamentos registados</td></tr>`
+              : rows.map(r => {
+                  const refs = (r.referencia || '').split('|').map(s => s.trim()).filter(Boolean);
+                  const desigs = (r.designacao || '').split('|').map(s => s.trim()).filter(Boolean);
+                  const refHtml = refs.length > 1
+                    ? refs.map(x => `${escapeHtml(x)}<br>`).join('')
+                    : escapeHtml(r.referencia || '—');
+                  const desigHtml = desigs.length > 1
+                    ? desigs.map(x => `${escapeHtml(x)}<br>`).join('')
+                    : escapeHtml(r.designacao || '—');
+                  const fotoBtn = r.foto_url
+                    ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEquipFoto('${escapeHtml(r.foto_url)}','${escapeHtml(r.foto_url2||'')}','${escapeHtml(r.designacao||'')} — ${escapeHtml(r.fornecedor||'')}')" title="Ver foto">🔍</button>`
+                    : `<span style="color:var(--text-muted);font-size:11px">—</span>`;
+                  const vtop = desigs.length > 1 ? 'vertical-align:top;padding-top:10px' : '';
+                  return `
+                  <tr>
+                    <td style="text-align:center;${vtop}">${fmtDate(r.data_compra)}</td>
+                    <td style="text-align:left;line-height:1.9">${desigHtml}</td>
+                    <td style="text-align:center;${vtop}">${escapeHtml(r.marca || '—')}</td>
+                    <td style="text-align:center;line-height:1.9;white-space:nowrap">${refHtml}</td>
+                    <td style="text-align:right;padding-right:60px;${vtop}">${fmtCurrency(r.valor)}</td>
+                    <td style="text-align:left;${vtop}">${escapeHtml(r.fornecedor || '—')}</td>
+                    <td style="text-align:center;${vtop}">
+                      ${canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEquipModal('${r.id}')" title="Editar">✎</button>` : ''}
+                    </td>
+                    <td style="text-align:center;${vtop}">${fotoBtn}</td>
+                  </tr>`;
+                }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Popup foto -->
+    <div id="equip-foto-overlay" onclick="closeEquipFoto(event)"
+         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;align-items:center;justify-content:center">
+      <div style="background:var(--bg-card,#0d1520);border:0.5px solid var(--border-color,#1e3a4a);border-radius:12px;padding:20px;max-width:90vw;position:relative">
+        <button onclick="document.getElementById('equip-foto-overlay').style.display='none'"
+                style="position:absolute;top:10px;right:12px;background:transparent;border:none;font-size:18px;color:var(--text-primary,#e2e8f0);cursor:pointer;opacity:.6">✕</button>
+        <img id="equip-foto-img1" src="" style="display:block;max-width:560px;width:100%;border-radius:8px">
+        <img id="equip-foto-img2" src="" style="display:none;max-width:560px;width:100%;border-radius:8px;margin-top:10px">
+        <div id="equip-foto-label" style="font-size:11px;color:var(--text-muted,#64748b);text-align:center;margin-top:10px"></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderInspectEquipamentosPreserveFocus() {
+  const el = document.activeElement;
+  const id = el ? el.id : null;
+  const val = el ? el.value : null;
+  const pos = el ? el.selectionStart : null;
+  renderInspectEquipamentos();
+  if (id) {
+    const r = document.getElementById(id);
+    if (r) { r.value = val; try { r.setSelectionRange(pos, pos); } catch(e){} r.focus(); }
+  }
+}
+
+function openEquipFoto(url1, url2, label) {
+  const i1 = document.getElementById('equip-foto-img1');
+  const i2 = document.getElementById('equip-foto-img2');
+  i1.src = url1;
+  if (url2) { i2.src = url2; i2.style.display = 'block'; }
+  else { i2.src = ''; i2.style.display = 'none'; }
+  document.getElementById('equip-foto-label').textContent = label;
+  document.getElementById('equip-foto-overlay').style.display = 'flex';
+}
+
+function closeEquipFoto(e) {
+  if (e.target === document.getElementById('equip-foto-overlay'))
+    document.getElementById('equip-foto-overlay').style.display = 'none';
+}
+
+async function openEquipModal(id) {
+  const eq = id ? state.inspectEquipamentos.find(r => r.id === id) : null;
+  const vals = {
+    data_compra: eq?.data_compra || '',
+    designacao: eq?.designacao || '',
+    marca: eq?.marca || '',
+    referencia: eq?.referencia || '',
+    valor: eq?.valor || '',
+    fornecedor: eq?.fornecedor || '',
+    foto_url: eq?.foto_url || '',
+    foto_url2: eq?.foto_url2 || ''
+  };
+
+  const html = `
+    <div class="modal-overlay" id="equip-modal" onclick="closeEquipModal(event)">
+      <div class="modal" style="max-width:500px">
+        <div class="modal-header">
+          <h3>${id ? 'Editar' : 'Novo'} Equipamento</h3>
+          <button class="modal-close" onclick="document.getElementById('equip-modal').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Data de compra</label>
+            <input id="eq-data" type="date" class="form-control" value="${vals.data_compra}">
+          </div>
+          <div class="form-group">
+            <label>Designação <span style="color:var(--text-muted);font-size:11px">(separar múltiplos com |)</span></label>
+            <input id="eq-desig" type="text" class="form-control" value="${escapeHtml(vals.designacao)}" placeholder="Ex: Câmara Térmica 12v | Detetor vidro">
+          </div>
+          <div class="form-group">
+            <label>Marca</label>
+            <input id="eq-marca" type="text" class="form-control" value="${escapeHtml(vals.marca)}" placeholder="Ex: Bosch">
+          </div>
+          <div class="form-group">
+            <label>Referência <span style="color:var(--text-muted);font-size:11px">(separar múltiplas com |)</span></label>
+            <input id="eq-ref" type="text" class="form-control" value="${escapeHtml(vals.referencia)}" placeholder="Ex: GTC 600C | M100435">
+          </div>
+          <div class="form-group">
+            <label>Valor (€)</label>
+            <input id="eq-valor" type="text" class="form-control" value="${escapeHtml(String(vals.valor))}" placeholder="Ex: 1358.14" inputmode="decimal">
+          </div>
+          <div class="form-group">
+            <label>Fornecedor</label>
+            <input id="eq-forn" type="text" class="form-control" value="${escapeHtml(vals.fornecedor)}" placeholder="Ex: LOJAFER">
+          </div>
+          <div class="form-group">
+            <label>URL Foto 1</label>
+            <input id="eq-foto1" type="text" class="form-control" value="${escapeHtml(vals.foto_url)}" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label>URL Foto 2 <span style="color:var(--text-muted);font-size:11px">(opcional)</span></label>
+            <input id="eq-foto2" type="text" class="form-control" value="${escapeHtml(vals.foto_url2)}" placeholder="https://...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          ${id && isAdmin() ? `<button class="btn btn-danger" onclick="deleteEquip('${id}')">🗑 Eliminar</button>` : ''}
+          <button class="btn btn-ghost" onclick="document.getElementById('equip-modal').remove()">Cancelar</button>
+          <button class="btn btn-gold" onclick="saveEquip('${id || ''}')">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeEquipModal(e) {
+  if (e.target === document.getElementById('equip-modal'))
+    document.getElementById('equip-modal').remove();
+}
+
+async function saveEquip(id) {
+  const rec = {
+    data_compra: document.getElementById('eq-data').value || null,
+    designacao: document.getElementById('eq-desig').value.trim(),
+    marca: document.getElementById('eq-marca').value.trim() || null,
+    referencia: document.getElementById('eq-ref').value.trim() || null,
+    valor: parseFloat(document.getElementById('eq-valor').value.replace(',', '.')) || null,
+    fornecedor: document.getElementById('eq-forn').value.trim() || null,
+    foto_url: document.getElementById('eq-foto1').value.trim() || null,
+    foto_url2: document.getElementById('eq-foto2').value.trim() || null
+  };
+  if (!rec.designacao) { showToast('Designação obrigatória', 'error'); return; }
+  let error;
+  if (id) {
+    ({ error } = await sb.from('inspect_equipamentos').update(rec).eq('id', id));
+  } else {
+    ({ error } = await sb.from('inspect_equipamentos').insert(rec));
+  }
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  document.getElementById('equip-modal').remove();
+  await reloadTable('inspectEquipamentos');
+  state.inspectEquipamentos = state.data.inspectEquipamentos || [];
+  renderInspectEquipamentos();
+  showToast(id ? 'Equipamento atualizado' : 'Equipamento criado', 'success');
+}
+
+async function deleteEquip(id) {
+  if (!confirm('Eliminar este equipamento?')) return;
+  const { error } = await sb.from('inspect_equipamentos').delete().eq('id', id);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  document.getElementById('equip-modal').remove();
+  await reloadTable('inspectEquipamentos');
+  state.inspectEquipamentos = state.data.inspectEquipamentos || [];
+  renderInspectEquipamentos();
+  showToast('Equipamento eliminado', 'success');
+}
+
 function renderInspectFinanceiro() {
   // Pedidos relevantes: Adjudicada em diante
   const data = state.data.inspect.filter(r =>
@@ -2866,6 +3145,7 @@ function renderInspectFinanceiro() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
           ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn active" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
@@ -3340,6 +3620,7 @@ function renderInspectDuplicados() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
           <button class="tab-btn active" onclick="switchInspectView('duplicados')">Duplicados</button>
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
@@ -3412,6 +3693,7 @@ function renderInspectAnalise() {
       <div class="page-actions">
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
+          <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
           ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
@@ -6525,6 +6807,8 @@ async function startApp() {
 
   initEmailJS();
   await loadAll();
+  state.inspectEquipamentos = state.data.inspectEquipamentos || [];
+  if (!state.filters.inspectEquip) state.filters.inspectEquip = '';
   navigate('dashboard');
 }
 
