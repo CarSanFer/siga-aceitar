@@ -3542,7 +3542,8 @@ async function atualizarIdPedidoPorExcel() {
 }
 
 function renderInspectDuplicados() {
-  const rows = state.data.inspect;
+  // Excluir registos marcados como "não é duplicado"
+  const rows = state.data.inspect.filter(r => !r.ignorar_duplicado);
   const norm = s => (s || '').toString().trim().toLowerCase();
 
   // Grupos por referência e por cliente
@@ -3605,8 +3606,11 @@ function renderInspectDuplicados() {
 
   const grupoBloco = (titulo, valor, arr) => `
     <div class="card" style="margin-bottom:16px">
-      <h4 style="text-align:left;padding:14px 18px">${titulo}: <span style="color:var(--gold-dark)">${escapeHtml(valor)}</span> · ${arr.length} pedidos</h4>
-      <div style="padding:0 16px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light)">
+        <h4 style="text-align:left">${titulo}: <span style="color:var(--gold-dark)">${escapeHtml(valor)}</span> · ${arr.length} pedidos</h4>
+        ${canEdit() ? `<button class="btn btn-ghost btn-sm" style="color:var(--success);border-color:var(--success)" onclick="ignorarGrupoDuplicados([${arr.map(r=>`'${r.id}'`).join(',')}])" title="Marcar grupo como não duplicado">✅ Não é duplicado</button>` : ''}
+      </div>
+      <div style="padding:12px 16px 16px;display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">
         ${arr.map(r => cardPedido(r, arr[0])).join('')}
       </div>
     </div>`;
@@ -3615,7 +3619,7 @@ function renderInspectDuplicados() {
     <div class="page-header">
       <div>
         <div class="page-title">Aceitar Inspect — Duplicados</div>
-        <div class="page-subtitle">${totalEnvolvidos} pedido(s) envolvidos · ${gruposRef.length} grupo(s) por referência · ${gruposCli.length} grupo(s) por cliente</div>
+        <div class="page-subtitle">${totalEnvolvidos} pedido(s) suspeitos · ${gruposRef.length} grupo(s) por referência · ${gruposCli.length} grupo(s) por cliente${state.data.inspect.filter(r=>r.ignorar_duplicado).length > 0 ? ` · <span style="color:var(--success)">${state.data.inspect.filter(r=>r.ignorar_duplicado).length} ignorado(s)</span>` : ''}</div>
       </div>
       <div class="page-actions">
         <div class="tabs">
@@ -3631,7 +3635,7 @@ function renderInspectDuplicados() {
     <div class="card" style="margin-bottom:16px;padding:10px 14px;background:#fffbeb;border-color:#fde68a">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="text-small" style="color:#92400e">
-          💡 Campos a <strong style="background:#fff8e1;padding:1px 6px;border-radius:4px">amarelo</strong> diferem do 1º card de cada grupo. Quanto mais amarelos, mais provavelmente são pedidos diferentes (não duplicados).
+          💡 Campos a <strong style="background:#fff8e1;padding:1px 6px;border-radius:4px">amarelo</strong> diferem do 1º card de cada grupo. Quanto mais amarelos, mais provavelmente são pedidos diferentes. Usa <strong>✅ Não é duplicado</strong> para retirar um grupo desta lista sem o eliminar.
         </div>
         ${isAdmin() ? `<button class="btn btn-danger btn-sm" onclick="limparDuplicadosExatos()">🧹 Limpar duplicados exatos</button>` : ''}
       </div>
@@ -3654,6 +3658,18 @@ function renderInspectDuplicados() {
       ${gruposCli.map(([cli, arr]) => grupoBloco('Cliente', arr[0].cliente, arr)).join('')}
     ` : ''}
   `;
+}
+
+async function ignorarGrupoDuplicados(ids) {
+  if (!confirm(`Marcar ${ids.length} pedido(s) como "não duplicado"?\nVão desaparecer desta lista mas continuam na Listagem.`)) return;
+  const { error } = await sb
+    .from('inspect_pedidos')
+    .update({ ignorar_duplicado: true })
+    .in('id', ids);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('inspect');
+  renderInspectDuplicados();
+  showToast(`${ids.length} pedido(s) marcado(s) como não duplicado`, 'success');
 }
 
 function renderInspectAnalise() {
