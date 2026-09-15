@@ -892,8 +892,7 @@
         </div>
       </div>
       <div class="navbar-links" id="navbar-links">
-        <button class="nav-link active" data-section="dashboard">Dashboard</button>
-        <button class="nav-link" data-section="concursos">Concursos</button>
+        <button class="nav-link active" data-section="concursos">Concursos</button>
         <button class="nav-link" data-section="inspect">Aceitar Inspect</button>
         <button class="nav-link" data-section="afetacoes">Afetações</button>
         <button class="nav-link" data-section="frota">Frota</button>
@@ -2727,7 +2726,7 @@ function renderInspect() {
         <div class="tabs">
           <button class="tab-btn active" onclick="switchInspectView('listagem')">Listagem</button>
           <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
-          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
+          <button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
@@ -2852,7 +2851,7 @@ function renderInspectEquipamentos() {
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
           <button class="tab-btn active" onclick="switchInspectView('equipamentos')">Equipamentos</button>
-          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
+          <button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
@@ -3146,7 +3145,7 @@ function renderInspectFinanceiro() {
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
           <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
-          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
+          <button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>
           <button class="tab-btn active" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn" onclick="switchInspectView('analise')">Análise</button>
         </div>
@@ -3694,7 +3693,7 @@ function renderInspectAnalise() {
         <div class="tabs">
           <button class="tab-btn" onclick="switchInspectView('listagem')">Listagem</button>
           <button class="tab-btn" onclick="switchInspectView('equipamentos')">Equipamentos</button>
-          ${isAdmin() ? `<button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>` : ''}
+          <button class="tab-btn" onclick="switchInspectView('duplicados')">Duplicados</button>
           <button class="tab-btn" onclick="switchInspectView('financeiro')">Financeiro</button>
           <button class="tab-btn active" onclick="switchInspectView('analise')">Análise</button>
         </div>
