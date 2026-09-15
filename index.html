@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SIGA — Sistema Integrado de Gestão Aceitar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231a3a5c'/%3E%3Ctext x='50' y='62' font-family='Segoe UI,sans-serif' font-size='36' font-weight='700' text-anchor='middle' fill='%23c9a24a'%3EA%3C/text%3E%3C/svg%3E">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -48,8 +50,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, system-ui, sans-serif;
-      font-size: 14px;
+      font-family: "Carlito", "Calibri", "Segoe UI", sans-serif;
+      font-size: 12px;
       color: var(--text);
       background: var(--bg);
       line-height: 1.5;
@@ -57,7 +59,7 @@
     }
 
     button { font-family: inherit; cursor: pointer; }
-    input, select, textarea { font-family: inherit; font-size: 14px; }
+    input, select, textarea { font-family: inherit; font-size: 12px; }
     a { color: inherit; text-decoration: none; }
 
     /* ========== LOGIN ========== */
@@ -2706,14 +2708,13 @@ function renderInspect() {
   ).join('');
 
   const cols = [
-    { key: 'id_pedido', label: 'ID' },
     { key: 'referencia', label: 'Referência' },
-    { key: 'data_pedido', label: 'Data Pedido' },
+    { key: 'data_pedido', label: 'Pedido', center: true },
     { key: 'cliente', label: 'Cliente' },
     { key: 'localizacao', label: 'Localização' },
-    { key: 'telefone', label: 'Telemóvel' },
+    { key: 'telefone', label: 'Telemóvel', center: true },
     { key: 'email', label: 'Email' },
-    { key: 'estado', label: 'Estado' }
+    { key: 'estado', label: 'Estado', center: true }
   ];
 
   $('#section-inspect').innerHTML = `
@@ -2759,6 +2760,7 @@ function renderInspect() {
             <tr>
               ${cols.map(c => `
                 <th class="${c.num?'num':''} ${key===c.key ? 'sort-'+dir : ''}"
+                    style="${c.center?'text-align:center':''}"
                     onclick="toggleSort('inspect','${c.key}')">${c.label}</th>
               `).join('')}
               <th></th>
@@ -2769,14 +2771,13 @@ function renderInspect() {
               ? `<tr class="empty-row"><td colspan="${cols.length+1}">Sem registos</td></tr>`
               : rows.map(r => `
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
-                  <td>${escapeHtml(r.id_pedido)}</td>
                   <td>${escapeHtml(r.referencia)}</td>
-                  <td>${fmtDate(r.data_pedido)}</td>
+                  <td style="text-align:center">${fmtDate(r.data_pedido)}</td>
                   <td><strong>${escapeHtml(r.cliente)}</strong></td>
                   <td>${escapeHtml(r.localizacao)}</td>
-                  <td>${escapeHtml(r.telefone)}</td>
+                  <td style="text-align:center">${escapeHtml(r.telefone)}</td>
                   <td>${escapeHtml(r.email)}</td>
-                  <td>${badge(r.estado)}</td>
+                  <td style="text-align:center">${badge(r.estado)}</td>
                   <td onclick="event.stopPropagation()">
                     <div class="actions">
                       ${canEdit() ? `
