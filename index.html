@@ -1099,6 +1099,7 @@ const state = {
   currentSection: 'dashboard',
   inspectView: 'listagem',
   inspectEquipamentos: [],
+  inspectFollowups: [],
   frotaView: 'listagem',
   concursoView: 'listagem',
   data: {
@@ -1431,8 +1432,8 @@ async function logout() {
 
 // ---------- DATA LOADING ----------
 async function loadAll() {
-  const tables = ['concursos', 'inspect_pedidos', 'inspect_equipamentos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frota_controlos', 'frota_despesas'];
-  const keys = ['concursos', 'inspect', 'inspectEquipamentos', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frotaControlos', 'frotaDespesas'];
+  const tables = ['concursos', 'inspect_pedidos', 'inspect_equipamentos', 'inspect_followups', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frota_controlos', 'frota_despesas'];
+  const keys = ['concursos', 'inspect', 'inspectEquipamentos', 'inspectFollowups', 'afetacoes', 'frota', 'equipamentos', 'comunicacoes', 'frotaControlos', 'frotaDespesas'];
 
   const results = await Promise.all(tables.map(t =>
     sb.from(t).select('*').order('created_at', { ascending: false })
@@ -1448,6 +1449,7 @@ async function reloadTable(key) {
     concursos: 'concursos',
     inspect: 'inspect_pedidos',
     inspectEquipamentos: 'inspect_equipamentos',
+    inspectFollowups: 'inspect_followups',
     afetacoes: 'afetacoes',
     frota: 'frota',
     equipamentos: 'equipamentos',
@@ -2773,7 +2775,7 @@ function renderInspect() {
                 <tr class="clickable" onclick="openInspectDetail('${r.id}')">
                   <td>${escapeHtml(r.referencia)}</td>
                   <td style="text-align:center">${fmtDate(r.data_pedido)}</td>
-                  <td><strong>${escapeHtml(r.cliente)}</strong></td>
+                  <td><strong>${escapeHtml(r.cliente)}</strong>${(()=>{const n=state.inspectFollowups.filter(f=>f.inspect_id===r.id).length;return n>0&&['Pendente','Enviada'].includes(r.estado)?` <span title="${n} follow-up(s)" style="cursor:default">💬<sup style="font-size:9px;vertical-align:super">${n}</sup></span>`:'';})()} </td>
                   <td>${escapeHtml(r.localizacao)}</td>
                   <td style="text-align:center">${escapeHtml(r.telefone)}</td>
                   <td>${escapeHtml(r.email)}</td>
@@ -4639,12 +4641,112 @@ async function openInspectDetail(id) {
           </div>
         </div>
       ` : ''}
+
+      ${['Pendente','Enviada'].includes(r.estado) ? (() => {
+        const fups = state.inspectFollowups.filter(f => f.inspect_id === id).sort((a,b) => a.data.localeCompare(b.data));
+        const meioIcon = { 'Telefone': '📞', 'Email': '📧', 'Whatsapp': '💬' };
+        return `
+        <div class="card mb-lg">
+          <div class="card-header">
+            <div class="card-title">💬 Follow-ups${fups.length ? ` (${fups.length})` : ''}</div>
+            ${canEdit() ? `<button class="btn btn-secondary btn-sm" onclick="openFollowupModal('${id}')">+ Registar Contacto</button>` : ''}
+          </div>
+          <div class="card-body">
+            ${fups.length === 0
+              ? `<div class="text-muted text-small">Sem contactos registados.</div>`
+              : fups.map(f => `
+                <div style="display:flex;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border-light);align-items:flex-start">
+                  <div style="flex-shrink:0;font-size:18px;line-height:1;padding-top:2px">${meioIcon[f.meio] || '💬'}</div>
+                  <div style="flex:1">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">
+                      <strong style="font-size:12px">${escapeHtml(f.meio)}</strong>
+                      <span class="text-small text-muted">${fmtDate(f.data)}</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text);white-space:pre-wrap">${escapeHtml(f.info)}</div>
+                  </div>
+                  ${isAdmin() ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger);flex-shrink:0" onclick="deleteFollowup('${f.id}','${id}')">🗑</button>` : ''}
+                </div>`).join('')}
+          </div>
+        </div>`;
+      })() : ''}
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
       ${canEdit() ? `<button class="btn btn-primary" onclick="closeModal(); openInspectModal('${r.id}')">Editar</button>` : ''}
     </div>
   `, 'lg');
+}
+
+// ---------- FOLLOW-UPS ----------
+function openFollowupModal(inspectId) {
+  const html = `
+    <div class="modal-overlay" id="followup-modal" onclick="closeFollowupModal(event)">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <h3>Registar Contacto</h3>
+          <button class="modal-close" onclick="document.getElementById('followup-modal').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Data</label>
+            <input id="fu-data" type="date" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+          <div class="form-group">
+            <label>Meio</label>
+            <select id="fu-meio" class="form-control">
+              <option value="Telefone">Telefone</option>
+              <option value="Email">Email</option>
+              <option value="Whatsapp">Whatsapp</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Informação</label>
+            <textarea id="fu-info" class="form-control" rows="4" placeholder="O que foi dito / resultado do contacto..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="document.getElementById('followup-modal').remove()">Cancelar</button>
+          <button class="btn btn-primary" onclick="saveFollowup('${inspectId}')">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('fu-info').focus();
+}
+
+function closeFollowupModal(e) {
+  if (e.target === document.getElementById('followup-modal'))
+    document.getElementById('followup-modal').remove();
+}
+
+async function saveFollowup(inspectId) {
+  const data   = document.getElementById('fu-data').value;
+  const meio   = document.getElementById('fu-meio').value;
+  const info   = document.getElementById('fu-info').value.trim();
+  if (!data || !info) { showToast('Data e informação são obrigatórias', 'error'); return; }
+  const { error } = await sb.from('inspect_followups').insert({
+    inspect_id: inspectId, data, meio, info,
+    created_by: state.user?.email || null
+  });
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  document.getElementById('followup-modal').remove();
+  await reloadTable('inspectFollowups');
+  state.inspectFollowups = state.data.inspectFollowups || [];
+  renderInspect();
+  openInspectDetail(inspectId);
+  showToast('Contacto registado', 'success');
+}
+
+async function deleteFollowup(followupId, inspectId) {
+  if (!confirm('Eliminar este registo de contacto?')) return;
+  const { error } = await sb.from('inspect_followups').delete().eq('id', followupId);
+  if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+  await reloadTable('inspectFollowups');
+  state.inspectFollowups = state.data.inspectFollowups || [];
+  renderInspect();
+  openInspectDetail(inspectId);
+  showToast('Registo eliminado', 'success');
 }
 
 // ---------- EMAIL NOTIFICATIONS ----------
@@ -6824,6 +6926,7 @@ async function startApp() {
   initEmailJS();
   await loadAll();
   state.inspectEquipamentos = state.data.inspectEquipamentos || [];
+  state.inspectFollowups = state.data.inspectFollowups || [];
   if (!state.filters.inspectEquip) state.filters.inspectEquip = '';
   navigate('dashboard');
 }
