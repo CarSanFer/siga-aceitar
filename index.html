@@ -4705,7 +4705,6 @@ async function saveFollowup(inspectId) {
     created_by: state.user?.email || null
   });
   if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-  document.getElementById('followup-modal').remove();
   await reloadTable('inspectFollowups');
   state.inspectFollowups = state.data.inspectFollowups || [];
   renderInspect();
